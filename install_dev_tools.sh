@@ -14,7 +14,7 @@ if command -v docker >/dev/null 2>&1; then
 else
     echo "Docker is not installed"
     # install
-    sudo apt install -y docker
+    sudo apt install -y docker.io
 fi
 
 # Docker Compose install
@@ -23,7 +23,7 @@ if docker compose version >/dev/null 2>&1; then
 else
     echo "Docker Compose is not installed"
     # install
-    sudo apt install -y docker
+    sudo apt install -y docker-compose-v2
 fi
 
 # Python 3.9 install
@@ -46,6 +46,14 @@ if command -v pip3 >/dev/null 2>&1; then
 else
     echo "pip is not installed"
     sudo apt install -y python3-pip
+fi
+
+# python3-venv
+if dpkg -s python3-venv >/dev/null 2>&1; then
+    echo "python3-venv is installed"
+else
+    echo "python3-venv is not installed"
+    sudo apt install -y python3-venv
 fi
 
 # venv
