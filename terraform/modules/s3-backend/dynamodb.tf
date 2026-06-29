@@ -9,6 +9,10 @@ resource "aws_dynamodb_table" "terraform_locks" {
     type = "S"
   }
 
+  server_side_encryption {
+    enabled = true
+  }
+
   tags = {
     Name        = "Terraform Lock Table"
     Environment = "lesson-5"

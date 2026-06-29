@@ -37,3 +37,14 @@ resource "aws_s3_bucket_public_access_block" "terraform_state_public_access_bloc
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+# Enable default server-side encryption for the Terraform state bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state_encryption" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
