@@ -1,10 +1,13 @@
 # Connect the module for S3 and DynamoDB resources
+# comment to prevent duplicating backend
+/*
 module "s3_backend" {
   source = "./modules/s3-backend"
 
   bucket_name = "pbori-neoversity-terraform-state"
   table_name  = "terraform-locks"
 }
+*/
 
 # Connect the module for VPC networking resources
 module "vpc" {
@@ -30,13 +33,26 @@ module "vpc" {
     "eu-central-1c"
   ]
 
-  vpc_name = "lesson-5-vpc"
+  vpc_name = "lesson-6-vpc"
 }
 
 # Connect the module for ECR repository
 module "ecr" {
   source = "./modules/ecr"
 
-  ecr_name     = "lesson-5-ecr"
+  ecr_name     = "lesson-6-ecr"
   scan_on_push = true
+}
+
+# Connect the module for EKS cluster
+module "eks" {
+  source = "./modules/eks"
+
+  cluster_name       = "lesson-6-eks"
+  subnet_ids         = module.vpc.public_subnets
+  node_instance_type = "t2.micro"
+
+  desired_size = 1
+  min_size     = 1
+  max_size     = 1
 }

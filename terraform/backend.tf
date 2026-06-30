@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket       = "pbori-neoversity-terraform-state"
-    key          = "lesson-5/terraform.tfstate"
+    key          = "lesson-6/terraform.tfstate"
     region       = "eu-central-1"
     profile      = "neoversity"
     encrypt      = true
