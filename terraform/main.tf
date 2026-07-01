@@ -50,7 +50,7 @@ module "eks" {
 
   cluster_name       = "lesson-6-eks"
   subnet_ids         = module.vpc.public_subnets
-  node_instance_type = "t2.micro"
+  node_instance_type = "t3.small"
 
   desired_size = 1
   min_size     = 1
