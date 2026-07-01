@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: your-registry/your-django-image
-  tag: latest
+  repository: 487337210313.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-ecr
+  tag: allowed-hosts
   pullPolicy: IfNotPresent
 
 service:
