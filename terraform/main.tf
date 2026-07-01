@@ -49,7 +49,7 @@ module "eks" {
   source = "./modules/eks"
 
   cluster_name       = "lesson-7-eks"
-  subnet_ids         = module.vpc.public_subnets
+  subnet_ids         = module.vpc.private_subnets
   node_instance_type = "t3.small"
 
   desired_size = 1
