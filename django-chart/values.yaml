@@ -1,11 +1,14 @@
+replicaCount: 1
+
 image:
   repository: your-registry/your-django-image
   tag: latest
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
-  port: 8000
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
 
 ingress:
   enabled: false
@@ -21,3 +24,17 @@ config:
   POSTGRES_USER: django_user
   POSTGRES_DB: django_db
   POSTGRES_PASSWORD: pass9764gd
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70

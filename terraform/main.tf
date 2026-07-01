@@ -33,14 +33,14 @@ module "vpc" {
     "eu-central-1c"
   ]
 
-  vpc_name = "lesson-6-vpc"
+  vpc_name = "lesson-7-vpc"
 }
 
 # Connect the module for ECR repository
 module "ecr" {
   source = "./modules/ecr"
 
-  ecr_name     = "lesson-6-ecr"
+  ecr_name     = "lesson-7-ecr"
   scan_on_push = true
 }
 
@@ -48,7 +48,7 @@ module "ecr" {
 module "eks" {
   source = "./modules/eks"
 
-  cluster_name       = "lesson-6-eks"
+  cluster_name       = "lesson-7-eks"
   subnet_ids         = module.vpc.public_subnets
   node_instance_type = "t3.small"
 
