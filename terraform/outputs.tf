@@ -75,3 +75,13 @@ output "eks_node_group_name" {
   description = "Name of the EKS managed node group"
   value       = module.eks.node_group_name
 }
+
+output "jenkins_release" {
+  description = "Name of the Jenkins Helm release"
+  value       = module.jenkins.jenkins_release_name
+}
+
+output "jenkins_namespace" {
+  description = "Kubernetes namespace where Jenkins is deployed"
+  value       = module.jenkins.jenkins_namespace
+}

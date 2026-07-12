@@ -56,3 +56,14 @@ module "eks" {
   min_size     = 1
   max_size     = 1
 }
+
+# Install Jenkins in the EKS cluster using Helm
+module "jenkins" {
+  source = "./modules/jenkins"
+
+  providers = {
+    helm = helm
+  }
+
+  depends_on = [module.eks]
+}
