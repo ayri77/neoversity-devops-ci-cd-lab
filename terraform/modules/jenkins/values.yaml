@@ -18,9 +18,16 @@ controller:
     - credentials-binding:latest
     - github:latest
     - job-dsl:latest
+    - authorize-project:latest
 
   JCasC:
     configScripts:
+      build-authorization: |
+        security:
+          queueItemAuthenticator:
+            authenticators:
+              - global:
+                  strategy: triggeringUsersAuthorizationStrategy      
       seed-job: |
         jobs:
           - script: |
@@ -60,6 +67,11 @@ controller:
                     ''')
                   }
                 }
+
+                configure { project ->
+                  def dslStep = project.builders[0].'javaposse.jobdsl.plugin.ExecuteDslScripts'[0]
+                  dslStep.appendNode('sandbox', true)
+                }                
               }
 
 persistence:
@@ -69,6 +81,13 @@ persistence:
 
 agent:
   serviceAccount: jenkins-sa
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
 
 serviceAccountAgent:
   create: false
