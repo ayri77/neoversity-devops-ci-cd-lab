@@ -51,7 +51,9 @@ resource "aws_iam_role_policy" "jenkins_ecr_policy" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
-          "ecr:DescribeRepositories"
+          "ecr:DescribeRepositories",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
         ]
 
         Resource = "*"

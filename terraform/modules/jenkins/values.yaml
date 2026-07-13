@@ -17,8 +17,59 @@ controller:
   additionalPlugins:
     - credentials-binding:latest
     - github:latest
+    - job-dsl:latest
+
+  JCasC:
+    configScripts:
+      seed-job: |
+        jobs:
+          - script: |
+              job('seed-job') {
+                description('Job to generate pipeline for Django project')
+
+                scm {
+                  git {
+                    remote {
+                      url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
+                    }
+                    branches('*/lesson-8')
+                  }
+                }
+
+                steps {
+                  dsl {
+                    text('''
+                      pipelineJob('lesson-8-django-docker') {
+                        description('Build and push the Django image to Amazon ECR')
+
+                        definition {
+                          cpsScm {
+                            scm {
+                              git {
+                                remote {
+                                  url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
+                                }
+                                branches('*/lesson-8')
+                              }
+                            }
+
+                            scriptPath('Jenkinsfile')
+                          }
+                        }
+                      }
+                    ''')
+                  }
+                }
+              }
 
 persistence:
   enabled: true
   storageClass: "gp3"
   size: "10Gi"
+
+agent:
+  serviceAccount: jenkins-sa
+
+serviceAccountAgent:
+  create: false
+  name: jenkins-sa
