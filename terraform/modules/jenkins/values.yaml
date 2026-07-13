@@ -27,7 +27,7 @@ controller:
           queueItemAuthenticator:
             authenticators:
               - global:
-                  strategy: triggeringUsersAuthorizationStrategy      
+                  strategy: triggeringUsersAuthorizationStrategy
       seed-job: |
         jobs:
           - script: |
@@ -39,7 +39,7 @@ controller:
                     remote {
                       url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
                     }
-                    branches('*/lesson-8')
+                    branches('*/lesson-8-9')
                   }
                 }
 
@@ -56,7 +56,7 @@ controller:
                                 remote {
                                   url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
                                 }
-                                branches('*/lesson-8')
+                                branches('*/lesson-8-9')
                               }
                             }
 
@@ -71,7 +71,7 @@ controller:
                 configure { project ->
                   def dslStep = project.builders[0].'javaposse.jobdsl.plugin.ExecuteDslScripts'[0]
                   dslStep.appendNode('sandbox', true)
-                }                
+                }
               }
 
 persistence:

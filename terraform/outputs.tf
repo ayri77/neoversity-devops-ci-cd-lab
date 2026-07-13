@@ -85,3 +85,13 @@ output "jenkins_namespace" {
   description = "Kubernetes namespace where Jenkins is deployed"
   value       = module.jenkins.jenkins_namespace
 }
+
+output "argocd_release" {
+  description = "Name of the Argo CD Helm release"
+  value       = module.argo_cd.release_name
+}
+
+output "argocd_namespace" {
+  description = "Namespace where Argo CD is installed"
+  value       = module.argo_cd.namespace
+}

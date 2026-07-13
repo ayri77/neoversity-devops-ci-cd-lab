@@ -49,9 +49,4 @@ resource "aws_eks_node_group" "general" {
     aws_iam_role_policy_attachment.ecr_read_only_policy
   ]
 
-  lifecycle {
-    ignore_changes = [
-      scaling_config[0].desired_size
-    ]
-  }
 }
