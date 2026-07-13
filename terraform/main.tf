@@ -61,8 +61,14 @@ module "eks" {
 module "jenkins" {
   source = "./modules/jenkins"
 
+  cluster_name      = module.eks.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+
   providers = {
-    helm = helm
+    aws        = aws
+    helm       = helm
+    kubernetes = kubernetes
   }
 
   depends_on = [
