@@ -20,5 +20,5 @@ controller:
 
 persistence:
   enabled: true
-  storageClass: ""
+  storageClass: "gp3"
   size: "10Gi"

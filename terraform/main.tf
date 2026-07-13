@@ -65,5 +65,8 @@ module "jenkins" {
     helm = helm
   }
 
-  depends_on = [module.eks]
+  depends_on = [
+    module.eks,
+    kubernetes_storage_class_v1.ebs_gp3,
+  ]
 }

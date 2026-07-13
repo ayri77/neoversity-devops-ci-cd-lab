@@ -9,6 +9,11 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 3.2"
     }
+
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -19,10 +24,14 @@ provider "aws" {
 
 data "aws_eks_cluster" "eks" {
   name = module.eks.cluster_name
+
+  depends_on = [module.eks]
 }
 
 data "aws_eks_cluster_auth" "eks" {
   name = module.eks.cluster_name
+
+  depends_on = [module.eks]
 }
 
 provider "helm" {
@@ -37,3 +46,8 @@ provider "helm" {
   }
 }
 
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks.token
+}
