@@ -95,3 +95,8 @@ output "argocd_namespace" {
   description = "Namespace where Argo CD is installed"
   value       = module.argo_cd.namespace
 }
+
+output "argocd_applications_release" {
+  description = "Name of the Argo CD Applications Helm release"
+  value       = module.argo_cd.applications_release_name
+}

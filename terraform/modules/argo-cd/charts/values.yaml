@@ -1,0 +1,32 @@
+applications:
+  - name: django-app
+    project: default
+
+    source:
+      repoURL: https://github.com/ayri77/neoversity-devops-gitops.git
+      path: charts/django-app
+      targetRevision: main
+      helm:
+        valueFiles:
+          - values.yaml
+
+    destination:
+      server: https://kubernetes.default.svc
+      namespace: django
+
+    syncPolicy:
+      automated:
+        enabled: true
+        prune: true
+        selfHeal: true
+      syncOptions:
+        - CreateNamespace=true
+
+repositories:
+  - name: django-gitops
+    type: git
+    url: https://github.com/ayri77/neoversity-devops-gitops.git
+
+repoConfig:
+  insecure: "false"
+  enableLfs: "false"
