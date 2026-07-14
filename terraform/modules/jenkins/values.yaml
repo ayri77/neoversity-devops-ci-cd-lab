@@ -1,6 +1,9 @@
 controller:
   admin:
     username: admin
+  containerEnvFrom:
+    - secretRef:
+        name: jenkins-github-token
 
   serviceType: LoadBalancer
   servicePort: 80
@@ -73,7 +76,17 @@ controller:
                   dslStep.appendNode('sandbox', true)
                 }
               }
-
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: github-token
+                      username: ayri77
+                      password: "${GITHUB_TOKEN}"
+                      description: GitHub PAT for GitOps repository
 persistence:
   enabled: true
   storageClass: "gp3"
