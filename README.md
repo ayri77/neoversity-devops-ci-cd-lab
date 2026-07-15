@@ -1,4 +1,4 @@
-# Neoversity DevOps CI/CD — Jenkins CI + Argo CD
+# Neoversity DevOps CI/CD Lab
 
 Практична робота за заняттями 8–9 реалізує повний CI/CD-процес для Django-застосунку з використанням Jenkins, Helm, Terraform, Amazon ECR, Amazon EKS та Argo CD.
 
@@ -454,3 +454,448 @@ terraform -chdir=terraform destroy
 ```
 
 S3 backend видаляється останнім, коли його state більше не потрібен. Якщо backend, EKS та інші ресурси були видалені повністю, наступне розгортання необхідно знову починати зі створення backend, а не з `terraform init` основної конфігурації.
+
+## Lesson DB Module — універсальний модуль Amazon RDS та Aurora
+
+Гілка [`lesson-db-module`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-db-module) містить універсальний Terraform-модуль для створення керованої реляційної бази даних в AWS.
+
+Залежно від значення `use_aurora` модуль створює:
+
+- `use_aurora = false` — один стандартний Amazon RDS instance;
+- `use_aurora = true` — Amazon Aurora cluster, один writer та налаштовувану кількість reader instances.
+
+Модуль підтримує:
+
+- PostgreSQL та MySQL для стандартної RDS;
+- Aurora PostgreSQL та Aurora MySQL;
+- DB Subnet Group;
+- Security Group;
+- окремі parameter groups для RDS та Aurora;
+- шифрування сховища;
+- автоматичні резервні копії;
+- Multi-AZ для стандартної RDS;
+- writer і reader endpoints для Aurora;
+- безпечне передавання пароля без його збереження в Git.
+
+### Структура модуля
+
+```text
+terraform/modules/rds/
+├── aurora.tf      # Aurora cluster, writer, readers і cluster parameter group
+├── outputs.tf     # RDS, Aurora та універсальні outputs
+├── rds.tf         # Стандартний RDS instance і DB parameter group
+├── shared.tf      # DB Subnet Group і Security Group
+└── variables.tf   # Типізовані вхідні змінні
+```
+
+Спільні DB Subnet Group та Security Group створюються в обох режимах. Parameter group вибирається умовно:
+
+| Режим | Основні ресурси |
+|---|---|
+| `use_aurora = false` | `aws_db_instance`, `aws_db_parameter_group` |
+| `use_aurora = true` | `aws_rds_cluster`, `aws_rds_cluster_instance`, `aws_rds_cluster_parameter_group` |
+| Обидва режими | `aws_db_subnet_group`, `aws_security_group` |
+
+### Приклад використання
+
+```hcl
+module "rds" {
+  source = "./modules/rds"
+
+  name                  = "myapp-db"
+  use_aurora            = false
+  aurora_instance_count = 2
+
+  # Aurora-only configuration
+  engine_cluster                = "aurora-postgresql"
+  engine_version_cluster        = "15.17"
+  parameter_group_family_aurora = "aurora-postgresql15"
+
+  # Standard RDS-only configuration
+  engine                     = "postgres"
+  engine_version             = "17.10"
+  parameter_group_family_rds = "postgres17"
+  allocated_storage          = 20
+  multi_az                   = false
+
+  # Common database configuration
+  instance_class = "db.t3.medium"
+  db_name        = "myapp"
+  username       = "postgres"
+  password       = var.db_password
+  port           = 5432
+
+  # Network configuration
+  vpc_id             = module.vpc.vpc_id
+  subnet_private_ids = module.vpc.private_subnets
+  subnet_public_ids  = module.vpc.public_subnets
+
+  publicly_accessible = false
+  allowed_cidr_blocks = ["10.0.0.0/16"]
+
+  # Backups and protection
+  backup_retention_period = 1
+  storage_encrypted       = true
+  deletion_protection     = false
+  skip_final_snapshot     = true
+
+  parameters = {
+    max_connections            = "200"
+    log_statement              = "ddl"
+    work_mem                   = "4096"
+    log_min_duration_statement = "500"
+  }
+
+  tags = {
+    Environment = "dev"
+    Project     = "myapp"
+  }
+}
+```
+
+Пароль оголошений як sensitive variable і не має значення за замовчуванням:
+
+```hcl
+variable "db_password" {
+  description = "Master password for the database"
+  type        = string
+  sensitive   = true
+}
+```
+
+### Вхідні змінні модуля
+
+| Змінна | Тип | Значення за замовчуванням | Призначення |
+|---|---|---|---|
+| `name` | `string` | обов’язкова | Ім’я стандартного RDS instance або базове ім’я Aurora cluster |
+| `use_aurora` | `bool` | `false` | Перемикає модуль між стандартною RDS та Aurora |
+| `engine` | `string` | `"postgres"` | Engine стандартної RDS: `postgres` або `mysql` |
+| `engine_version` | `string` | `"17.10"` | Версія engine стандартної RDS |
+| `parameter_group_family_rds` | `string` | `"postgres17"` | Родина parameter group для стандартної RDS |
+| `instance_class` | `string` | `"db.t3.micro"` | Клас instance для стандартної RDS або Aurora |
+| `allocated_storage` | `number` | `20` | Обсяг сховища стандартної RDS у GiB |
+| `db_name` | `string` | обов’язкова | Ім’я початкової бази даних |
+| `username` | `string` | обов’язкова | Ім’я master-користувача бази даних |
+| `password` | `string`, sensitive | обов’язкова | Пароль master-користувача; не зберігається в Git |
+| `vpc_id` | `string` | обов’язкова | ID VPC, у якій створюється база |
+| `subnet_private_ids` | `list(string)` | обов’язкова | Приватні subnet IDs для внутрішньої бази |
+| `subnet_public_ids` | `list(string)` | `[]` | Публічні subnet IDs для режиму `publicly_accessible = true` |
+| `publicly_accessible` | `bool` | `false` | Дозволяє створення публічно доступного endpoint |
+| `port` | `number` | `5432` | Порт бази: зазвичай `5432` для PostgreSQL або `3306` для MySQL |
+| `allowed_cidr_blocks` | `list(string)` | `[]` | CIDR-блоки, яким Security Group дозволяє підключення |
+| `multi_az` | `bool` | `false` | Вмикає Multi-AZ для стандартної RDS |
+| `backup_retention_period` | `number` | `7` | Кількість днів зберігання автоматичних резервних копій |
+| `parameters` | `map(string)` | `{}` | Параметри для parameter group вибраного типу бази |
+| `storage_encrypted` | `bool` | `true` | Вмикає шифрування сховища |
+| `deletion_protection` | `bool` | `false` | Захищає базу або cluster від випадкового видалення |
+| `skip_final_snapshot` | `bool` | `true` | Визначає, чи пропускати фінальний snapshot під час видалення |
+| `tags` | `map(string)` | `{}` | AWS tags для створених ресурсів |
+| `engine_cluster` | `string` | `"aurora-postgresql"` | Aurora engine: `aurora-postgresql` або `aurora-mysql` |
+| `engine_version_cluster` | `string` | `"15.17"` | Версія Aurora engine |
+| `parameter_group_family_aurora` | `string` | `"aurora-postgresql15"` | Родина Aurora cluster parameter group |
+| `aurora_instance_count` | `number` | `2` | Загальна кількість Aurora instances, включно з одним writer |
+
+Змінні без default є обов’язковими, оскільки залежать від конкретного середовища. Для `password` значення за замовчуванням навмисно відсутнє, щоб пароль не зберігався у вихідному коді.
+
+### Як змінити тип бази даних
+
+#### Стандартна RDS PostgreSQL
+
+Для створення звичайного PostgreSQL instance:
+
+```hcl
+use_aurora                = false
+engine                    = "postgres"
+engine_version            = "17.10"
+parameter_group_family_rds = "postgres17"
+port                      = 5432
+```
+
+У цьому режимі створюються:
+
+- один `aws_db_instance`;
+- стандартна `aws_db_parameter_group`;
+- DB Subnet Group;
+- Security Group.
+
+#### Стандартна RDS MySQL
+
+Для переходу на MySQL потрібно змінити engine, його версію, parameter group family, порт і engine-specific parameters:
+
+```hcl
+use_aurora                 = false
+engine                     = "mysql"
+engine_version             = "<supported MySQL version>"
+parameter_group_family_rds = "<matching MySQL family>"
+port                       = 3306
+```
+
+Версія engine та parameter group family повинні бути сумісними й доступними у вибраному AWS Region.
+
+Параметри `log_statement` і `work_mem` належать PostgreSQL. Для MySQL у `parameters` потрібно передати параметри, які підтримує відповідна MySQL parameter group.
+
+#### Aurora PostgreSQL
+
+У поточному прикладі Aurora PostgreSQL уже налаштована. Для перемикання достатньо змінити прапор:
+
+```hcl
+use_aurora = true
+```
+
+Aurora-specific значення:
+
+```hcl
+engine_cluster                = "aurora-postgresql"
+engine_version_cluster        = "15.17"
+parameter_group_family_aurora = "aurora-postgresql15"
+instance_class                = "db.t3.medium"
+aurora_instance_count         = 2
+port                          = 5432
+```
+
+За значення `aurora_instance_count = 2` створюються:
+
+- один writer;
+- один reader.
+
+Якщо встановити:
+
+```hcl
+aurora_instance_count = 1
+```
+
+буде створено лише writer. Кількість readers обчислюється як `aurora_instance_count - 1`.
+
+#### Aurora MySQL
+
+Для Aurora MySQL потрібно змінити Aurora engine, версію, parameter group family, порт і parameters:
+
+```hcl
+use_aurora                   = true
+engine_cluster               = "aurora-mysql"
+engine_version_cluster       = "<supported Aurora MySQL version>"
+parameter_group_family_aurora = "<matching Aurora MySQL family>"
+port                         = 3306
+```
+
+#### Зміна класу instance
+
+Клас обчислювальних ресурсів задається однією змінною:
+
+```hcl
+instance_class = "db.t3.medium"
+```
+
+Перед застосуванням потрібно перевірити, що вибраний клас підтримує відповідні engine, engine version та AWS Region.
+
+#### Multi-AZ і кількість реплік
+
+Для стандартної RDS Multi-AZ вмикається так:
+
+```hcl
+multi_az = true
+```
+
+Змінна `multi_az` використовується лише стандартною RDS. Aurora має власну кластерну модель відмовостійкості, а кількість її compute instances задається через `aurora_instance_count`.
+
+### Запуск Terraform
+
+#### Передумови
+
+Потрібні:
+
+- Terraform;
+- AWS CLI;
+- AWS profile `neoversity`;
+- створений S3 backend для Terraform state.
+
+Перевірка AWS credentials:
+
+```bash
+aws sts get-caller-identity --profile neoversity
+```
+
+#### Безпечне передавання пароля
+
+Пароль не записується в Git або в committed `.tfvars` file. У WSL його можна передати через environment variable:
+
+```bash
+read -s -p "DB password: " TF_VAR_db_password
+echo
+export TF_VAR_db_password
+```
+
+Значення позначене як `sensitive`, тому Terraform приховує його у звичайному CLI output. Водночас database password може зберігатися у Terraform state, тому remote state повинен бути приватним і зашифрованим.
+
+#### Форматування та перевірка
+
+З кореня репозиторію:
+
+```bash
+terraform -chdir=terraform init -reconfigure
+terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform validate
+terraform -chdir=terraform plan
+```
+
+Після перевірки plan:
+
+```bash
+terraform -chdir=terraform apply
+```
+
+Після завершення роботи зі змінною:
+
+```bash
+unset TF_VAR_db_password
+```
+
+Параметр `-target=module.rds` використовувався лише для ізольованої перевірки database module у навчальному репозиторії, який також містить EKS, Jenkins та Argo CD:
+
+```bash
+terraform -chdir=terraform plan -target=module.rds
+terraform -chdir=terraform apply -target=module.rds
+```
+
+`-target` не призначений для звичайного повного розгортання. Для стандартного запуску всієї конфігурації потрібно використовувати `terraform plan` і `terraform apply` без targeting.
+
+### Перевірка результату
+
+Універсальні Terraform outputs:
+
+```bash
+terraform -chdir=terraform output database_endpoint
+terraform -chdir=terraform output database_port
+terraform -chdir=terraform output rds_security_group_id
+terraform -chdir=terraform output rds_subnet_group_name
+```
+
+Для Aurora додатково доступні:
+
+```bash
+terraform -chdir=terraform output database_reader_endpoint
+terraform -chdir=terraform output aurora_cluster_identifier
+terraform -chdir=terraform output aurora_writer_instance_identifier
+terraform -chdir=terraform output aurora_reader_instance_identifiers
+```
+
+#### Перевірка стандартної RDS
+
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier myapp-db \
+  --region eu-central-1 \
+  --profile neoversity \
+  --query "DBInstances[0].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Engine:Engine,Version:EngineVersion,Class:DBInstanceClass,MultiAZ:MultiAZ,Public:PubliclyAccessible,Encrypted:StorageEncrypted,Endpoint:Endpoint.Address,Port:Endpoint.Port}" \
+  --output table
+```
+
+Очікуваний стан після створення — `available`.
+
+#### Перевірка Aurora
+
+```bash
+aws rds describe-db-clusters \
+  --db-cluster-identifier myapp-db-cluster \
+  --region eu-central-1 \
+  --profile neoversity \
+  --query "DBClusters[0].{Identifier:DBClusterIdentifier,Status:Status,Engine:Engine,Version:EngineVersion,WriterEndpoint:Endpoint,ReaderEndpoint:ReaderEndpoint,Encrypted:StorageEncrypted}" \
+  --output table
+```
+
+Перевірка writer і reader instances:
+
+```bash
+aws rds describe-db-instances \
+  --region eu-central-1 \
+  --profile neoversity \
+  --filters "Name=db-cluster-id,Values=myapp-db-cluster" \
+  --query "DBInstances[].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Class:DBInstanceClass,AZ:AvailabilityZone}" \
+  --output table
+```
+
+### Доказ створення стандартної RDS
+
+Під час практичної перевірки було успішно створено приватний зашифрований PostgreSQL RDS instance версії `17.10`.
+
+![Стандартний PostgreSQL RDS instance](docs/images/rds-standard-instance.png)
+
+### Особливість AWS Free Plan
+
+Стандартний PostgreSQL RDS instance був успішно створений і перевірений у AWS.
+
+Для Aurora Terraform сформував коректний plan:
+
+```text
+Plan: 4 to add, 0 to change, 2 to destroy
+```
+
+Plan передбачав створення:
+
+- Aurora cluster parameter group;
+- Aurora cluster;
+- writer instance;
+- reader instance.
+
+Під час `apply` AWS відхилив створення повністю конфігурованого Aurora cluster через обмеження поточного AWS Free Plan:
+
+```text
+FreeTierRestrictionError:
+To use Aurora clusters with free plan accounts
+you need to set WithExpressConfiguration.
+```
+
+AWS Free Plan дозволяє створення Aurora PostgreSQL через [Express Configuration](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/CHAP_GettingStartedAurora.AuroraPostgreSQL.ExpressConfig.html), яка автоматично створює Aurora Serverless cluster і writer.
+
+Express Configuration не була використана, оскільки:
+
+- вона відрізняється від архітектури домашнього завдання;
+- автоматично створює Serverless writer замість окремо керованих Terraform resources;
+- не відповідає сценарію з власними DB Subnet Group, Security Group, writer і reader instances;
+- AWS provider, використаний у проєкті, не підтримує `WithExpressConfiguration` у `aws_rds_cluster`. Підтримка відстежується у [HashiCorp issue #47117](https://github.com/hashicorp/terraform-provider-aws/issues/47117).
+
+Тому кореневий приклад залишено у запускаемому для поточного акаунта режимі:
+
+```hcl
+use_aurora = false
+```
+
+Aurora-частина модуля збережена як повна Terraform-конфігурація для AWS account без обмеження Free Plan.
+
+### Обґрунтування відмінностей від навчального конспекту
+
+| Відмінність | Реалізація | Обґрунтування |
+|---|---|---|
+| Версія стандартного PostgreSQL | `17.10` замість `17.2` | Версія `17.2` недоступна в `eu-central-1`; через AWS CLI підтверджено підтримку `17.10` і family `postgres17` |
+| Версія Aurora PostgreSQL | `15.17` замість `15.3` | Версія `15.3` недоступна в регіоні; підтверджено `15.17` і family `aurora-postgresql15` |
+| Пароль | `var.db_password` без default | Hardcoded password із конспекту міг би потрапити до Git; значення передається через `TF_VAR_db_password` |
+| Доступ до бази | `publicly_accessible = false` | База розміщується у private subnets і не має прямого доступу з інтернету |
+| Security Group | Доступ лише з `10.0.0.0/16` | Порт бази не відкривається для `0.0.0.0/0` |
+| Шифрування | `storage_encrypted = true` | Дані шифруються у сховищі AWS |
+| Очищення training environment | `skip_final_snapshot = true`, `deletion_protection = false` | Дозволяє повністю видалити навчальні ресурси після перевірки; для production ці значення потрібно змінити |
+| Кількість Aurora instances | `aurora_instance_count` означає загальну кількість instances | У конспекті одночасно використовувалися різні назви `aurora_instance_count` і `aurora_replica_count`; одна змінна усуває неоднозначність |
+| Порядок створення Aurora | Reader має `depends_on` від writer | Writer гарантовано створюється першим, а під час destroy reader видаляється раніше writer |
+| Parameter group | Додано `max_connections`, `log_statement`, `work_mem` і `log_min_duration_statement` | Перші три параметри прямо вимагає домашнє завдання; останній залишено як додатковий параметр із практики |
+| Aurora у Free Plan | Live apply не виконувався через обмеження акаунта | Заміна на Express Configuration порушила б структуру та вимоги завдання |
+
+### Видалення ресурсів
+
+Після збереження доказів і завершення перевірки всі створені ресурси потрібно видалити:
+
+```bash
+read -s -p "DB password: " TF_VAR_db_password
+echo
+export TF_VAR_db_password
+
+terraform -chdir=terraform destroy
+
+unset TF_VAR_db_password
+```
+
+Після destroy потрібно перевірити state:
+
+```bash
+terraform -chdir=terraform state list
+```
+
+Основна конфігурація використовує вже створений remote S3 backend. Його bucket не створюється модулем у цьому запуску, тому звичайний `terraform destroy` основної конфігурації не видаляє backend до завершення роботи зі state.

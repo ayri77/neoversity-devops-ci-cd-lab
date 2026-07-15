@@ -98,7 +98,7 @@ module "rds" {
   source = "./modules/rds"
 
   name                  = "myapp-db"
-  use_aurora            = true
+  use_aurora            = false
   aurora_instance_count = 2
 
   # Aurora-only configuration
@@ -136,6 +136,8 @@ module "rds" {
 
   parameters = {
     max_connections            = "200"
+    log_statement              = "ddl"
+    work_mem                   = "4096"
     log_min_duration_statement = "500"
   }
 

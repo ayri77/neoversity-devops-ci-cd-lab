@@ -132,7 +132,7 @@ variable "backup_retention_period" {
 }
 
 variable "parameters" {
-  description = "Database parameters added to the RDS parameter group"
+  description = "Database parameters added to the parameter group for the selected database type"
   type        = map(string)
   default     = {}
 }
