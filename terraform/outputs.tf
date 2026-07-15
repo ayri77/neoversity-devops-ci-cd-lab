@@ -100,3 +100,68 @@ output "argocd_applications_release" {
   description = "Name of the Argo CD Applications Helm release"
   value       = module.argo_cd.applications_release_name
 }
+
+output "rds_instance_identifier" {
+  description = "Identifier of the standard RDS instance"
+  value       = module.rds.rds_instance_identifier
+}
+
+output "rds_instance_arn" {
+  description = "ARN of the standard RDS instance"
+  value       = module.rds.rds_instance_arn
+}
+
+output "rds_endpoint" {
+  description = "Connection endpoint of the standard RDS instance"
+  value       = module.rds.rds_endpoint
+}
+
+output "rds_port" {
+  description = "Port of the standard RDS instance"
+  value       = module.rds.rds_port
+}
+
+output "rds_security_group_id" {
+  description = "ID of the database security group"
+  value       = module.rds.security_group_id
+}
+
+output "rds_subnet_group_name" {
+  description = "Name of the database subnet group"
+  value       = module.rds.db_subnet_group_name
+}
+
+output "database_endpoint" {
+  description = "Primary endpoint of the selected database type"
+  value       = module.rds.database_endpoint
+}
+
+output "database_reader_endpoint" {
+  description = "Aurora reader endpoint; null for a standard RDS instance"
+  value       = module.rds.database_reader_endpoint
+}
+
+output "database_port" {
+  description = "Database connection port"
+  value       = module.rds.database_port
+}
+
+output "aurora_cluster_identifier" {
+  description = "Identifier of the Aurora cluster"
+  value       = module.rds.aurora_cluster_identifier
+}
+
+output "aurora_cluster_arn" {
+  description = "ARN of the Aurora cluster"
+  value       = module.rds.aurora_cluster_arn
+}
+
+output "aurora_writer_instance_identifier" {
+  description = "Identifier of the Aurora writer instance"
+  value       = module.rds.aurora_writer_instance_identifier
+}
+
+output "aurora_reader_instance_identifiers" {
+  description = "Identifiers of the Aurora reader instances"
+  value       = module.rds.aurora_reader_instance_identifiers
+}

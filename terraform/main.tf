@@ -92,3 +92,55 @@ module "argo_cd" {
     module.eks
   ]
 }
+
+# Create a standard RDS instance or an Aurora cluster
+module "rds" {
+  source = "./modules/rds"
+
+  name                  = "myapp-db"
+  use_aurora            = true
+  aurora_instance_count = 2
+
+  # Aurora-only configuration
+  engine_cluster                = "aurora-postgresql"
+  engine_version_cluster        = "15.17"
+  parameter_group_family_aurora = "aurora-postgresql15"
+
+  # Standard RDS-only configuration
+  engine                     = "postgres"
+  engine_version             = "17.10"
+  parameter_group_family_rds = "postgres17"
+  allocated_storage          = 20
+  multi_az                   = false
+
+  # Common database configuration
+  instance_class = "db.t3.medium"
+  db_name        = "myapp"
+  username       = "postgres"
+  password       = var.db_password
+  port           = 5432
+
+  # Network configuration
+  vpc_id             = module.vpc.vpc_id
+  subnet_private_ids = module.vpc.private_subnets
+  subnet_public_ids  = module.vpc.public_subnets
+
+  publicly_accessible = false
+  allowed_cidr_blocks = ["10.0.0.0/16"]
+
+  # Backups and protection
+  backup_retention_period = 1
+  storage_encrypted       = true
+  deletion_protection     = false
+  skip_final_snapshot     = true
+
+  parameters = {
+    max_connections            = "200"
+    log_min_duration_statement = "500"
+  }
+
+  tags = {
+    Environment = "dev"
+    Project     = "myapp"
+  }
+}
