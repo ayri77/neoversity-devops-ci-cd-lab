@@ -1,5 +1,7 @@
 # Neoversity DevOps CI/CD Lab
 
+> **Поточна домашня робота:** створення універсального Terraform-модуля для Amazon RDS та Aurora. Репозиторій продовжує попередні практичні роботи, тому документацію поточного завдання розміщено в окремому розділі **«Lesson DB Module — універсальний модуль Amazon RDS та Aurora»** наприкінці README.
+
 Практична робота за заняттями 8–9 реалізує повний CI/CD-процес для Django-застосунку з використанням Jenkins, Helm, Terraform, Amazon ECR, Amazon EKS та Argo CD.
 
 Після запуску Jenkins pipeline:
@@ -553,7 +555,7 @@ module "rds" {
 }
 ```
 
-Пароль оголошений як sensitive variable і не має значення за замовчуванням:
+Пароль оголошено як sensitive variable і не має значення за замовчуванням:
 
 ```hcl
 variable "db_password" {
@@ -854,7 +856,7 @@ Express Configuration не була використана, оскільки:
 - не відповідає сценарію з власними DB Subnet Group, Security Group, writer і reader instances;
 - AWS provider, використаний у проєкті, не підтримує `WithExpressConfiguration` у `aws_rds_cluster`. Підтримка відстежується у [HashiCorp issue #47117](https://github.com/hashicorp/terraform-provider-aws/issues/47117).
 
-Тому кореневий приклад залишено у запускаемому для поточного акаунта режимі:
+Тому кореневий приклад залишено у придатному для запуску в поточному акаунті режимі:
 
 ```hcl
 use_aurora = false
