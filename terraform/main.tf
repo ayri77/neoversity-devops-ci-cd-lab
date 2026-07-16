@@ -54,9 +54,9 @@ module "eks" {
   cluster_version     = "1.36"
   public_access_cidrs = var.eks_public_access_cidrs
 
-  desired_size = 2
+  desired_size = 3
   min_size     = 2
-  max_size     = 2
+  max_size     = 3
 }
 
 # Install Jenkins in the EKS cluster using Helm
