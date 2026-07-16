@@ -33,14 +33,14 @@ module "vpc" {
     "eu-central-1c"
   ]
 
-  vpc_name = "lesson-8-vpc"
+  vpc_name = "final-project-vpc"
 }
 
 # Connect the module for ECR repository
 module "ecr" {
   source = "./modules/ecr"
 
-  ecr_name     = "lesson-8-ecr"
+  ecr_name     = "final-project-ecr"
   scan_on_push = true
 }
 
@@ -48,9 +48,11 @@ module "ecr" {
 module "eks" {
   source = "./modules/eks"
 
-  cluster_name       = "lesson-8-eks"
-  subnet_ids         = module.vpc.private_subnets
-  node_instance_type = "t3.small"
+  cluster_name        = "final-project-eks"
+  subnet_ids          = module.vpc.private_subnets
+  node_instance_type  = "t3.small"
+  cluster_version     = "1.36"
+  public_access_cidrs = var.eks_public_access_cidrs
 
   desired_size = 2
   min_size     = 2
@@ -100,7 +102,7 @@ module "argo_cd" {
 module "rds" {
   source = "./modules/rds"
 
-  name                  = "myapp-db"
+  name                  = "final-project-db"
   use_aurora            = false
   aurora_instance_count = 2
 
@@ -147,7 +149,7 @@ module "rds" {
 
   tags = {
     Environment = "dev"
-    Project     = "myapp"
+    Project     = "final-project"
   }
 }
 

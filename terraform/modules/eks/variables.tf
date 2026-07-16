@@ -31,3 +31,24 @@ variable "max_size" {
   type        = number
   default     = 1
 }
+
+variable "cluster_version" {
+  description = "Kubernetes version for the EKS control plane and managed node group"
+  type        = string
+  default     = "1.36"
+}
+
+variable "public_access_cidrs" {
+  description = "CIDR blocks allowed to access the public EKS API endpoint"
+  type        = list(string)
+
+  validation {
+    condition = (
+      length(var.public_access_cidrs) > 0 &&
+      alltrue([
+        for cidr in var.public_access_cidrs : can(cidrhost(cidr, 0))
+      ])
+    )
+    error_message = "At least one valid CIDR block must be provided."
+  }
+}

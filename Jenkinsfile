@@ -31,7 +31,7 @@ spec:
   environment {
     AWS_REGION    = 'eu-central-1'
     ECR_REGISTRY  = '487337210313.dkr.ecr.eu-central-1.amazonaws.com'
-    IMAGE_NAME    = 'lesson-8-ecr'
+    IMAGE_NAME    = 'final-project-ecr'
     IMAGE_TAG     = "v1.0.${BUILD_NUMBER}"
 
     GITOPS_REPO   = 'github.com/ayri77/neoversity-devops-gitops.git'

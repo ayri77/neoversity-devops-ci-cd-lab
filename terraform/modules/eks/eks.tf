@@ -2,11 +2,13 @@
 resource "aws_eks_cluster" "main" {
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster_role.arn
+  version  = var.cluster_version
 
   vpc_config {
     subnet_ids              = var.subnet_ids
     endpoint_private_access = true
     endpoint_public_access  = true
+    public_access_cidrs     = var.public_access_cidrs
   }
 
   access_config {
@@ -25,6 +27,7 @@ resource "aws_eks_node_group" "general" {
   node_group_name = "${var.cluster_name}-general"
   node_role_arn   = aws_iam_role.eks_node_role.arn
   subnet_ids      = var.subnet_ids
+  version         = var.cluster_version
 
   capacity_type  = "ON_DEMAND"
   instance_types = [var.node_instance_type]
