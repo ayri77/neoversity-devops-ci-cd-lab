@@ -67,17 +67,26 @@ resource "aws_iam_role_policy" "jenkins_ecr_policy" {
 
         Action = [
           "ecr:GetAuthorizationToken",
+        ]
+
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+
+        Action = [
           "ecr:BatchCheckLayerAvailability",
           "ecr:PutImage",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           "ecr:DescribeRepositories",
+          "ecr:DescribeImages",
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
         ]
 
-        Resource = "*"
+        Resource = var.ecr_repository_arn
       }
     ]
   })

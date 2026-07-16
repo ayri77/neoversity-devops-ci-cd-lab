@@ -68,6 +68,7 @@ module "jenkins" {
   oidc_provider_url     = module.eks.oidc_provider_url
   github_token          = var.github_token
   github_token_revision = var.github_token_revision
+  ecr_repository_arn    = module.ecr.repository_arn
 
   providers = {
     aws        = aws

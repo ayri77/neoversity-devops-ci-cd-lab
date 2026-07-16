@@ -24,6 +24,13 @@ spec:
       command:
         - cat
       tty: true
+
+    - name: trivy
+      image: aquasec/trivy:0.72.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - cat
+      tty: true
 '''
     }
   }
@@ -49,6 +56,23 @@ spec:
               --dockerfile="${WORKSPACE}/docker/django/Dockerfile" \
               --destination="${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" \
               --cache=true
+          '''
+        }
+      }
+    }
+
+    stage('Scan Docker Image') {
+      steps {
+        container('trivy') {
+          sh '''
+            trivy image \
+              --scanners vuln \
+              --severity CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              --no-progress \
+              --timeout 15m \
+              "${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
           '''
         }
       }

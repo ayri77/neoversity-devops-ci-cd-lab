@@ -25,3 +25,8 @@ variable "github_token_revision" {
   type        = number
   default     = 1
 }
+
+variable "ecr_repository_arn" {
+  description = "ARN of the ECR repository available to Jenkins"
+  type        = string
+}
