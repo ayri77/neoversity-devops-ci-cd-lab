@@ -21,6 +21,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.existingSecret | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

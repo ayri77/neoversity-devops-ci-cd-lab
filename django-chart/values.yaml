@@ -18,15 +18,11 @@ ingress:
   pathType: Prefix
   tls: false
 
+existingSecret: django-app-secrets
+
 config:
   ALLOWED_HOSTS: "localhost,127.0.0.1,*"
-  SECRET_KEY: "django-insecure-ftetmmr47w3t9p4u..."
   DEBUG: "True"
-  POSTGRES_HOST: db
-  POSTGRES_PORT: "5432"
-  POSTGRES_USER: django_user
-  POSTGRES_DB: django_db
-  POSTGRES_PASSWORD: pass9764gd
 
 resources:
   requests:
