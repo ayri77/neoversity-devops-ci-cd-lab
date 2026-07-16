@@ -165,3 +165,33 @@ output "aurora_reader_instance_identifiers" {
   description = "Identifiers of the Aurora reader instances"
   value       = module.rds.aurora_reader_instance_identifiers
 }
+
+output "monitoring_namespace" {
+  description = "Kubernetes namespace containing monitoring components"
+  value       = module.monitoring.namespace
+}
+
+output "prometheus_release" {
+  description = "Name of the Prometheus Helm release"
+  value       = module.monitoring.prometheus_release_name
+}
+
+output "prometheus_service" {
+  description = "Name of the Prometheus server Kubernetes Service"
+  value       = module.monitoring.prometheus_service_name
+}
+
+output "grafana_release" {
+  description = "Name of the Grafana Helm release"
+  value       = module.monitoring.grafana_release_name
+}
+
+output "grafana_service" {
+  description = "Name of the Grafana Kubernetes Service"
+  value       = module.monitoring.grafana_service_name
+}
+
+output "grafana_admin_secret" {
+  description = "Name of the Kubernetes Secret containing Grafana admin credentials"
+  value       = module.monitoring.grafana_admin_secret_name
+}

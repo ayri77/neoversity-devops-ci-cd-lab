@@ -146,3 +146,22 @@ module "rds" {
     Project     = "myapp"
   }
 }
+
+# Install Prometheus and Grafana in the EKS cluster using Helm
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  namespace                = "monitoring"
+  prometheus_chart_version = "29.17.0"
+  grafana_chart_version    = "12.7.2"
+
+  providers = {
+    helm       = helm
+    kubernetes = kubernetes
+  }
+
+  depends_on = [
+    module.eks,
+    kubernetes_storage_class_v1.ebs_gp3,
+  ]
+}
