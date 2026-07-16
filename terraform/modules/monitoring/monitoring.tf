@@ -16,6 +16,17 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
+resource "helm_release" "metrics_server" {
+  name       = var.metrics_server_release_name
+  namespace  = "kube-system"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = var.metrics_server_chart_version
+
+  wait    = true
+  timeout = 900
+}
+
 resource "helm_release" "prometheus" {
   name       = var.prometheus_release_name
   namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name

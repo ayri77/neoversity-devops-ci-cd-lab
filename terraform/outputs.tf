@@ -146,6 +146,11 @@ output "database_port" {
   value       = module.rds.database_port
 }
 
+output "database_host" {
+  description = "Database DNS host without the port"
+  value       = module.rds.database_host
+}
+
 output "aurora_cluster_identifier" {
   description = "Identifier of the Aurora cluster"
   value       = module.rds.aurora_cluster_identifier
@@ -194,4 +199,9 @@ output "grafana_service" {
 output "grafana_admin_secret" {
   description = "Name of the Kubernetes Secret containing Grafana admin credentials"
   value       = module.monitoring.grafana_admin_secret_name
+}
+
+output "metrics_server_release_name" {
+  description = "Name of the Metrics Server Helm release"
+  value       = module.monitoring.metrics_server_release_name
 }

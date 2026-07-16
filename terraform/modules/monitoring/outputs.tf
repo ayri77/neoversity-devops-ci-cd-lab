@@ -27,3 +27,8 @@ output "grafana_admin_secret_name" {
   description = "Name of the Kubernetes Secret containing Grafana admin credentials"
   value       = helm_release.grafana.name
 }
+
+output "metrics_server_release_name" {
+  description = "Name of the Metrics Server Helm release"
+  value       = helm_release.metrics_server.name
+}

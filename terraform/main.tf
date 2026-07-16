@@ -61,9 +61,11 @@ module "eks" {
 module "jenkins" {
   source = "./modules/jenkins"
 
-  cluster_name      = module.eks.cluster_name
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  oidc_provider_url = module.eks.oidc_provider_url
+  cluster_name          = module.eks.cluster_name
+  oidc_provider_arn     = module.eks.oidc_provider_arn
+  oidc_provider_url     = module.eks.oidc_provider_url
+  github_token          = var.github_token
+  github_token_revision = var.github_token_revision
 
   providers = {
     aws        = aws
@@ -89,7 +91,8 @@ module "argo_cd" {
   }
 
   depends_on = [
-    module.eks
+    module.eks,
+    kubernetes_secret_v1.django_app,
   ]
 }
 
@@ -114,11 +117,12 @@ module "rds" {
   multi_az                   = false
 
   # Common database configuration
-  instance_class = "db.t3.medium"
-  db_name        = "myapp"
-  username       = "postgres"
-  password       = var.db_password
-  port           = 5432
+  instance_class    = "db.t3.micro"
+  db_name           = "myapp"
+  username          = "postgres"
+  password          = var.db_password
+  password_revision = var.db_password_revision
+  port              = 5432
 
   # Network configuration
   vpc_id             = module.vpc.vpc_id
@@ -151,9 +155,10 @@ module "rds" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  namespace                = "monitoring"
-  prometheus_chart_version = "29.17.0"
-  grafana_chart_version    = "12.7.2"
+  namespace                    = "monitoring"
+  prometheus_chart_version     = "29.17.0"
+  grafana_chart_version        = "12.7.2"
+  metrics_server_chart_version = "3.13.1"
 
   providers = {
     helm       = helm

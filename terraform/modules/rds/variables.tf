@@ -63,11 +63,18 @@ variable "password" {
   description = "Master database password"
   type        = string
   sensitive   = true
+  ephemeral   = true
 
   validation {
     condition     = length(var.password) >= 8
     error_message = "The database password must contain at least 8 characters."
   }
+}
+
+variable "password_revision" {
+  description = "Revision used to rotate the database password"
+  type        = number
+  default     = 1
 }
 
 variable "vpc_id" {

@@ -27,3 +27,15 @@ variable "grafana_chart_version" {
   type        = string
   default     = "12.7.2"
 }
+
+variable "metrics_server_release_name" {
+  description = "Helm release name for Metrics Server"
+  type        = string
+  default     = "metrics-server"
+}
+
+variable "metrics_server_chart_version" {
+  description = "Version of the metrics-server/metrics-server Helm chart"
+  type        = string
+  default     = "3.13.1"
+}

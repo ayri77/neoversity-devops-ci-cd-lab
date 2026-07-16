@@ -38,10 +38,11 @@ resource "aws_db_instance" "standard" {
   instance_class    = var.instance_class
   allocated_storage = var.allocated_storage
 
-  db_name  = var.db_name
-  username = var.username
-  password = var.password
-  port     = var.port
+  db_name             = var.db_name
+  username            = var.username
+  password_wo         = var.password
+  password_wo_version = var.password_revision
+  port                = var.port
 
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.rds.id]

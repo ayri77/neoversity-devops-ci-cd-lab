@@ -5,8 +5,8 @@ controller:
     - secretRef:
         name: jenkins-github-token
 
-  serviceType: LoadBalancer
-  servicePort: 80
+  serviceType: ClusterIP
+  servicePort: 8080
   targetPort: 8080
 
   resources:
@@ -42,14 +42,14 @@ controller:
                     remote {
                       url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
                     }
-                    branches('*/lesson-8-9')
+                    branches('*/final-project')
                   }
                 }
 
                 steps {
                   dsl {
                     text('''
-                      pipelineJob('lesson-8-django-docker') {
+                      pipelineJob('final-project-django-docker') {
                         description('Build and push the Django image to Amazon ECR')
 
                         definition {
@@ -59,7 +59,7 @@ controller:
                                 remote {
                                   url('https://github.com/ayri77/neoversity-devops-ci-cd-lab.git')
                                 }
-                                branches('*/lesson-8-9')
+                                branches('*/final-project')
                               }
                             }
 

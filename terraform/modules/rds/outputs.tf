@@ -54,6 +54,15 @@ output "database_port" {
   value       = var.port
 }
 
+output "database_host" {
+  description = "Database DNS host without the port"
+  value = var.use_aurora ? (
+    try(aws_rds_cluster.aurora[0].endpoint, null)
+    ) : (
+    try(aws_db_instance.standard[0].address, null)
+  )
+}
+
 output "aurora_cluster_identifier" {
   description = "Identifier of the Aurora cluster"
   value       = try(aws_rds_cluster.aurora[0].cluster_identifier, null)

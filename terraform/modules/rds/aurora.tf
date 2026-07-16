@@ -32,7 +32,8 @@ resource "aws_rds_cluster" "aurora" {
   engine_version                  = var.engine_version_cluster
   database_name                   = var.db_name
   master_username                 = var.username
-  master_password                 = var.password
+  master_password_wo              = var.password
+  master_password_wo_version      = var.password_revision
   port                            = var.port
   db_subnet_group_name            = aws_db_subnet_group.default.name
   vpc_security_group_ids          = [aws_security_group.rds.id]
