@@ -1,95 +1,151 @@
-# Neoversity DevOps CI/CD Lab
+# Фінальний DevOps-проєкт: інфраструктура на AWS
 
-> **Поточна домашня робота:** створення універсального Terraform-модуля для Amazon RDS та Aurora. Репозиторій продовжує попередні практичні роботи, тому документацію поточного завдання розміщено в окремому розділі **«Lesson DB Module — універсальний модуль Amazon RDS та Aurora»** наприкінці README.
+Фінальний проєкт курсу **DevOps CI/CD** об’єднує попередні практичні роботи в єдину інфраструктуру на AWS. Ресурси створюються за допомогою Terraform, застосунок працює в Amazon EKS, Jenkins виконує CI, Argo CD — GitOps-доставку, а Prometheus і Grafana забезпечують моніторинг.
 
-Практична робота за заняттями 8–9 реалізує повний CI/CD-процес для Django-застосунку з використанням Jenkins, Helm, Terraform, Amazon ECR, Amazon EKS та Argo CD.
+> **Гілка для перевірки:** [`final-project`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/final-project)
+>
+> **GitOps-репозиторій:** [`neoversity-devops-gitops`](https://github.com/ayri77/neoversity-devops-gitops)
+>
+> **Контрольний результат:** Jenkins build №4 — `SUCCESS`, образ `final-project-ecr:v1.0.4`, Argo CD — `Synced / Healthy`, `/health/` — `HTTP 200`.
 
-Після запуску Jenkins pipeline:
+## Зміст
 
-1. Docker-образ Django-застосунку збирається за допомогою Kaniko;
-2. образ публікується в Amazon ECR;
-3. Jenkins оновлює тег образу в Helm chart окремого GitOps-репозиторію;
-4. Argo CD виявляє Git commit та автоматично синхронізує застосунок у кластері EKS.
+- [Результат](#результат)
+- [Архітектура](#архітектура)
+- [Компоненти](#компоненти)
+- [Структура репозиторіїв](#структура-репозиторіїв)
+- [Передумови](#передумови)
+- [Підготовка секретів](#підготовка-секретів)
+- [Розгортання Terraform](#розгортання-terraform)
+- [Перевірка Kubernetes](#перевірка-kubernetes)
+- [CI/CD з Jenkins та Argo CD](#cicd-з-jenkins-та-argo-cd)
+- [Доступ до сервісів](#доступ-до-сервісів)
+- [Моніторинг](#моніторинг)
+- [Автомасштабування](#автомасштабування)
+- [База даних](#база-даних)
+- [Безпека](#безпека)
+- [Фінальна перевірка](#фінальна-перевірка)
+- [Видалення ресурсів](#видалення-ресурсів)
+- [Попередні практичні роботи](#попередні-практичні-роботи)
 
-## Репозиторії
+## Результат
 
-| Призначення | Репозиторій | Гілка |
-|---|---|---|
-| Код застосунку, Dockerfile, Jenkinsfile і Terraform | [neoversity-devops-ci-cd-lab](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-8-9) | `lesson-8-9` |
-| GitOps Helm chart із бажаним станом застосунку | [neoversity-devops-gitops](https://github.com/ayri77/neoversity-devops-gitops) | `main` |
+Під час контрольного розгортання перевірено:
 
-Контрольні версії успішного розгортання:
+| Перевірка | Результат |
+| --- | --- |
+| Terraform | `No changes. Your infrastructure matches the configuration.` |
+| Amazon EKS | три Ready worker nodes `t3.small`, Kubernetes `1.36` |
+| Jenkins | pipeline `final-project-django-docker`, build №4 — `SUCCESS` |
+| Amazon ECR | immutable tags, AES-256, scan on push, образ `v1.0.4` |
+| Trivy | перевірка образу на CRITICAL CVE пройдена |
+| Argo CD | Application `django-app` — `Synced / Healthy` |
+| Django | дві базові репліки, Gunicorn, `/health/` повертає `HTTP 200` |
+| Amazon RDS | PostgreSQL `17.10`, статус `available`, приватний та зашифрований |
+| Prometheus | Kubernetes API, nodes, cAdvisor та service endpoints — `UP` |
+| Grafana | Prometheus Data Source працює, імпортовано Node Exporter Full dashboard |
+| HPA | масштабування Django з 2 до 6 Pod і повернення до 2 після завершення навантаження |
 
-- основний репозиторій: commit `8da7e15`;
-- GitOps-репозиторій: commit [`90e97fe`](https://github.com/ayri77/neoversity-devops-gitops/commit/90e97fe) — `Deploy lesson-8-ecr:v1.0.2`;
-- Docker image: `lesson-8-ecr:v1.0.2`;
-- Argo CD Application: `django-app`, стани `Healthy` і `Synced`;
-- у кластері працюють дві репліки Django-застосунку.
+Відповідність критеріям оцінювання:
+
+| Критерій | Реалізація |
+| --- | --- |
+| Коректна архітектура | VPC, публічні й приватні subnet, NAT Gateway, EKS, ECR, RDS |
+| Безпека | приватна RDS, обмежений EKS API, IRSA, Security Groups, write-only secrets, Trivy |
+| Застосунок і CI/CD | Kaniko → ECR → GitOps commit → Argo CD → Helm deployment |
+| Моніторинг і масштабування | Prometheus, Grafana, Metrics Server, HPA |
+| Документація | повний порядок розгортання, перевірки, демонстрації та очищення ресурсів |
 
 ## Архітектура
 
-| Компонент | Призначення |
-|---|---|
-| Terraform | Створює AWS-інфраструктуру та встановлює Jenkins і Argo CD через Helm |
-| Amazon VPC | Надає мережу з публічними та приватними підмережами |
-| Amazon EKS | Запускає Jenkins, Argo CD і Django-застосунок |
-| Amazon ECR | Зберігає версійовані Docker-образи |
-| Jenkins | Оркеструє CI pipeline |
-| Kubernetes Jenkins Agent | Запускає тимчасовий pod із контейнерами Kaniko та Git |
-| Kaniko | Збирає і публікує образ без Docker daemon |
-| GitOps-репозиторій | Зберігає Helm chart і бажаний тег образу |
-| Argo CD | Відстежує GitOps-репозиторій та синхронізує кластер |
-| Helm | Описує встановлення Jenkins, Argo CD та Django-застосунку |
-
-Кластер `lesson-8-eks` використовує дві worker nodes типу `t3.small`. Jenkins працює в namespace `jenkins`, Argo CD — у `argocd`, а Django-застосунок — у `django`.
-
-## Схема CI/CD
-
 ```mermaid
 flowchart TD
-    A["Git push у lesson-8-9"] --> B["Jenkins pipeline"]
-    B --> C["Kaniko: build і push"]
-    C --> D["Amazon ECR: lesson-8-ecr:v1.0.N"]
-    B --> E["Git: оновлення values.yaml"]
-    E --> F["GitOps repository: main"]
-    F --> G["Argo CD auto sync"]
-    G --> H["Helm release у namespace django"]
-    D -. "Docker image" .-> H
-    H --> I["Django pods у Amazon EKS"]
+    DEV["Developer: final-project"] --> JENKINS["Jenkins у EKS"]
+    JENKINS --> KANIKO["Kaniko build"]
+    KANIKO --> ECR["Amazon ECR"]
+    JENKINS --> TRIVY["Trivy scan"]
+    JENKINS --> GITOPS["GitOps repository"]
+    GITOPS --> ARGO["Argo CD auto-sync"]
+    ARGO --> APP["Django + HPA"]
+    ECR --> APP
+    APP --> RDS["Amazon RDS PostgreSQL"]
+    PROM["Prometheus"] --> APP
+    PROM --> EKS["EKS nodes"]
+    GRAFANA["Grafana"] --> PROM
 ```
 
-CI та CD розділені:
+Мережева схема:
 
-- Jenkins відповідає за збірку, публікацію образу та зміну GitOps-репозиторію;
-- Argo CD не запускається безпосередньо з Jenkins, а самостійно реагує на зміну бажаного стану в Git.
+- VPC: `10.0.0.0/16`;
+- три публічні subnet: `10.0.1.0/24`–`10.0.3.0/24`;
+- три приватні subnet: `10.0.4.0/24`–`10.0.6.0/24`;
+- регіон: `eu-central-1`;
+- Availability Zones: `eu-central-1a`, `eu-central-1b`, `eu-central-1c`;
+- worker nodes EKS і RDS розміщені у приватних subnet;
+- вихід із приватних subnet до інтернету здійснюється через NAT Gateway;
+- зовнішній доступ до Django надає Kubernetes Service типу `LoadBalancer`;
+- Jenkins, Argo CD, Prometheus і Grafana використовують `ClusterIP` та доступні локально через port-forward.
 
-## Структура проєктів
+## Компоненти
+
+| Компонент | Реалізація |
+| --- | --- |
+| IaC | Terraform `1.15+` |
+| Cloud | AWS, регіон `eu-central-1` |
+| Network | VPC, Internet Gateway, NAT Gateway, route tables, 6 subnet |
+| Kubernetes | Amazon EKS `1.36`, managed node group, 3× `t3.small` |
+| Storage | Amazon EBS CSI Driver, default StorageClass `gp3` |
+| Registry | Amazon ECR `final-project-ecr` |
+| Database | Amazon RDS PostgreSQL `17.10`, `db.t3.micro` |
+| CI | Jenkins Helm chart `5.9.32`, JCasC, Job DSL, Kubernetes Agent |
+| Image build | Kaniko `v1.16.0-debug` без Docker daemon |
+| Security scan | Trivy `0.72.0` |
+| CD | Argo CD Helm chart `10.1.3`, automated sync, prune, self-heal |
+| Application | Django `5.2.16`, Gunicorn `26.0.0`, Helm chart |
+| Monitoring | Prometheus `29.17.0`, Grafana `12.7.2`, Metrics Server `3.13.1` |
+| Autoscaling | HorizontalPodAutoscaler: 2–6 Pod, CPU target 70% |
+
+Модуль `rds` підтримує два режими через `use_aurora`:
+
+- `false` — стандартний Amazon RDS;
+- `true` — Amazon Aurora cluster з writer та reader instances.
+
+У контрольному розгортанні використано RDS PostgreSQL (`use_aurora = false`) як достатній і економніший варіант для вимоги **RDS або Aurora**.
+
+## Структура репозиторіїв
 
 Основний репозиторій:
 
 ```text
 neoversity-devops-ci-cd-lab/
 ├── Jenkinsfile
+├── README.md
+├── django-chart/                  # локальна копія Helm chart
 ├── docker/
 │   └── django/
 │       ├── Dockerfile
+│       ├── requirements.txt
 │       ├── manage.py
-│       └── requirements.txt
-├── terraform/
-│   ├── backend.tf
-│   ├── main.tf
-│   ├── outputs.tf
-│   ├── providers.tf
-│   ├── storage.tf
-│   └── modules/
-│       ├── argo-cd/
-│       ├── ecr/
-│       ├── eks/
-│       ├── jenkins/
-│       ├── s3-backend/
-│       └── vpc/
-└── docs/
-    └── images/
+│       └── goit/
+├── images/
+│   └── final-project/             # докази контрольного розгортання
+└── terraform/
+    ├── backend.tf
+    ├── django.tf                  # namespace і write-only Secret застосунку
+    ├── main.tf
+    ├── outputs.tf
+    ├── providers.tf
+    ├── storage.tf                 # encrypted gp3 StorageClass
+    ├── variables.tf
+    └── modules/
+        ├── argo-cd/
+        ├── ecr/
+        ├── eks/
+        ├── jenkins/
+        ├── monitoring/
+        ├── rds/
+        ├── s3-backend/
+        └── vpc/
 ```
 
 GitOps-репозиторій:
@@ -105,799 +161,608 @@ neoversity-devops-gitops/
             ├── deployment.yaml
             ├── hpa.yaml
             ├── ingress.yaml
-            ├── postgres.yaml
             └── service.yaml
 ```
 
-Каталог `django-chart/` в основному репозиторії залишено як результат попереднього заняття з Helm. Argo CD для цієї роботи використовує лише chart `charts/django-app` з окремого GitOps-репозиторію.
+Argo CD використовує саме chart із GitOps-репозиторію. Каталог `django-chart/` в основному репозиторії збережено як локальний приклад і синхронізовано з контрольним образом `v1.0.4`.
 
-## Застосування Terraform
+## Передумови
 
-### Передумови
-
-Потрібні такі інструменти:
+Необхідні інструменти:
 
 - AWS CLI;
 - Terraform;
 - `kubectl`;
 - Helm;
-- Git.
+- Git;
+- `curl`, `openssl`, `base64`;
+- AWS profile `neoversity` з необхідними IAM permissions.
 
-AWS CLI використовує профіль `neoversity`, регіон — `eu-central-1`.
-
-Перевірка доступу до AWS:
+Перевірка:
 
 ```bash
 aws sts get-caller-identity --profile neoversity
+terraform version
+kubectl version --client
+helm version
 ```
 
-Для remote state використовується S3 backend:
+Terraform використовує remote S3 backend:
 
-- bucket: `pbori-neoversity-terraform-state`;
-- key: `lesson-8/terraform.tfstate`;
-- блокування: S3 native lockfile через `use_lockfile = true`.
+```text
+bucket: pbori-neoversity-terraform-state
+key:    final-project/terraform.tfstate
+region: eu-central-1
+lock:   native S3 lockfile
+```
 
-Backend був створений у попередній практичній роботі та має існувати до виконання `terraform init`. Він навмисно не створюється тим самим запуском Terraform, який уже використовує цей backend.
+Backend bucket був створений окремо під час попередньої практичної роботи. Він навмисно не створюється тим самим запуском, який уже використовує цей backend.
 
-### Звичайний запуск для наявного backend та кластера
+Модуль `modules/s3-backend` зберігає навчальний варіант bootstrap через S3 і DynamoDB. Активний backend фінального проєкту використовує актуальне native S3 locking (`use_lockfile = true`), тому окрема DynamoDB table для блокування state у цьому запуску не потрібна.
 
-З кореня основного репозиторію:
+## Підготовка секретів
+
+Секрети не зберігаються у Git, `.tfvars` або Terraform state. Кореневі variables позначені як `sensitive` та `ephemeral`, а ресурси використовують write-only attributes:
+
+- `github_token` → Kubernetes Secret `jenkins-github-token` через `data_wo`;
+- `db_password` → RDS через `password_wo`;
+- `django_secret_key` та реквізити RDS → Kubernetes Secret `django-app-secrets` через `data_wo`.
+
+Змінні потрібно задати в поточній WSL-сесії перед `plan`, `apply` або `destroy`:
 
 ```bash
-terraform -chdir=terraform init -reconfigure
+cd ~/project/neoversity-devops-ci-cd-lab
+
+PUBLIC_IP="$(curl -fsS https://checkip.amazonaws.com | tr -d '\r\n')"
+export TF_VAR_eks_public_access_cidrs="[\"${PUBLIC_IP}/32\"]"
+
+read -rsp "RDS password: " TF_VAR_db_password
+echo
+export TF_VAR_db_password
+
+read -rsp "GitHub PAT: " TF_VAR_github_token
+echo
+export TF_VAR_github_token
+
+export TF_VAR_django_secret_key="$(openssl rand -hex 32)"
+```
+
+Для fine-grained GitHub PAT достатньо надати доступ до репозиторію `neoversity-devops-gitops` і permission **Contents: Read and write**. Токен вводиться приховано й не повинен з’являтися в командах, логах або README.
+
+Значення revision variables збільшуються лише під час ротації відповідного секрету:
+
+```text
+github_token_revision
+db_password_revision
+django_secret_revision
+```
+
+## Розгортання Terraform
+
+Форматування та валідація:
+
+```bash
 terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform init -reconfigure
 terraform -chdir=terraform validate
-terraform -chdir=terraform plan
+```
+
+Створення збереженого plan:
+
+```bash
+terraform -chdir=terraform plan \
+  -out=/tmp/final-project.tfplan
+```
+
+Розгортання:
+
+```bash
+terraform -chdir=terraform apply \
+  /tmp/final-project.tfplan
+```
+
+Еквівалентний прямий запуск без збереженого plan:
+
+```bash
 terraform -chdir=terraform apply
 ```
 
-Після створення EKS потрібно оновити локальний Kubernetes context:
+Після створення EKS потрібно оновити локальний kubeconfig:
 
 ```bash
 aws eks update-kubeconfig \
   --region eu-central-1 \
-  --name lesson-8-eks \
+  --name final-project-eks \
   --profile neoversity
 ```
 
-Базова перевірка:
+Основні Terraform outputs:
 
 ```bash
 terraform -chdir=terraform output
-kubectl get nodes
-helm list --all-namespaces
 ```
 
-### Перший запуск після повного видалення інфраструктури
+Серед них: VPC і subnet IDs, ECR URL, EKS endpoint, RDS endpoint, namespaces, Helm releases та імена monitoring services.
 
-Порядок запуску важливий:
-
-1. окремо відновити S3 backend;
-2. створити VPC, ECR та EKS;
-3. створити Kubernetes Secret із GitHub PAT;
-4. виконати повний `terraform apply`, який встановить Jenkins і Argo CD.
-
-Спочатку створюється базова AWS-інфраструктура:
+## Перевірка Kubernetes
 
 ```bash
-terraform -chdir=terraform init -reconfigure
+kubectl get nodes -o wide
 
-terraform -chdir=terraform apply \
-  -target=module.vpc \
-  -target=module.ecr \
-  -target=module.eks
+kubectl get all -n jenkins
+kubectl get all -n argocd
+kubectl get all -n monitoring
+kubectl get all -n django
+
+kubectl get pvc -A
+kubectl get hpa -n django
+kubectl top nodes
 ```
 
-Після оновлення kubeconfig створюється namespace і Secret. Токен вводиться приховано та не записується в команду shell history:
+Пошук Pod, які не перебувають у штатному стані:
 
 ```bash
-kubectl create namespace jenkins \
-  --dry-run=client \
-  -o yaml | kubectl apply -f -
-
-read -rsp "GitHub PAT: " GITHUB_TOKEN
-echo
-
-kubectl create secret generic jenkins-github-token \
-  --namespace jenkins \
-  --from-literal=GITHUB_TOKEN="$GITHUB_TOKEN" \
-  --dry-run=client \
-  -o yaml | kubectl apply -f -
-
-unset GITHUB_TOKEN
+kubectl get pods -A \
+  --field-selector='status.phase!=Running,status.phase!=Succeeded'
 ```
 
-Після цього застосовується повна Terraform-конфігурація:
+Під час першого розгортання Django може тимчасово мати `ImagePullBackOff`, поки ECR ще порожній. Після першого успішного Jenkins build тег у GitOps-репозиторії оновлюється, і Argo CD автоматично завершує rollout.
+
+## CI/CD з Jenkins та Argo CD
+
+### CI — Jenkins
+
+Jenkins налаштований через Helm і JCasC. Після першого входу потрібно один раз запустити `seed-job`; він створює pipeline `final-project-django-docker` з `Jenkinsfile` гілки `final-project`.
+
+Pipeline виконує три stages:
+
+1. **Build & Push Docker Image** — Kaniko створює образ і публікує його в Amazon ECR;
+2. **Scan Docker Image** — Trivy перевіряє образ на CRITICAL vulnerabilities і зупиняє pipeline при знайденій виправній критичній CVE;
+3. **Update GitOps Repository** — Jenkins змінює `image.tag`, створює Git commit і виконує push у GitOps-репозиторій.
+
+Формат тегу:
+
+```text
+v1.0.${BUILD_NUMBER}
+```
+
+Jenkins Agent працює як тимчасовий Kubernetes Pod із контейнерами `kaniko`, `trivy` та `git`. Доступ до ECR реалізовано через IRSA service account `jenkins-sa`, без статичних AWS credentials.
+
+![Успішний Jenkins build №4](images/final-project/jenkins-build-4-success.png)
+
+Лог демонструє masked GitHub token, зміну тегу на `v1.0.4`, commit, push та завершення pipeline зі статусом `SUCCESS`:
+
+![Jenkins оновив GitOps-репозиторій](images/final-project/jenkins-gitops-update-v1.0.4.png)
+
+### CD — Argo CD
+
+Argo CD Application `django-app` відстежує:
+
+```text
+repository: https://github.com/ayri77/neoversity-devops-gitops.git
+branch:     main
+path:       charts/django-app
+namespace:  django
+```
+
+Увімкнено:
+
+- automated sync;
+- prune;
+- self-heal;
+- автоматичне створення namespace.
+
+Jenkins не виконує прямий `kubectl apply`: бажаний стан змінюється тільки через Git, після чого Argo CD синхронізує кластер.
+
+![Argo CD: v1.0.4 Synced і Healthy](images/final-project/argocd-v1.0.4-synced-healthy.png)
+
+Перевірка з CLI:
 
 ```bash
-terraform -chdir=terraform plan
-terraform -chdir=terraform apply
+kubectl get applications.argoproj.io -n argocd
+
+kubectl rollout status \
+  deployment/django-app-django \
+  -n django \
+  --timeout=10m
+
+kubectl get deployment django-app-django \
+  -n django \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 ```
 
-GitHub PAT створюється поза Terraform, тому його значення не потрапляє до Git або Terraform state.
+## Доступ до сервісів
 
-## Перевірка Jenkins
-
-Перевірити Jenkins controller, agent pods, сервіс і persistent volume:
+### Jenkins
 
 ```bash
-kubectl get pods,svc,pvc -n jenkins
+kubectl port-forward \
+  svc/jenkins 8080:8080 \
+  -n jenkins
 ```
 
-Отримати початковий пароль користувача `admin`:
+Адреса: <http://localhost:8080>
+
+Логін — `admin`. Отримання пароля:
 
 ```bash
 kubectl get secret jenkins \
-  --namespace jenkins \
+  -n jenkins \
   -o jsonpath='{.data.jenkins-admin-password}' \
   | base64 --decode
 echo
 ```
 
-Зовнішню адресу Jenkins показує сервіс типу `LoadBalancer`:
+### Argo CD
 
 ```bash
-kubectl get svc jenkins -n jenkins
+kubectl port-forward \
+  svc/argocd-server 8081:443 \
+  -n argocd
 ```
 
-Jenkins конфігурується автоматично через JCasC. Після першого встановлення:
+Адреса: <https://localhost:8081>
 
-1. відкрити job `seed-job`;
-2. натиснути **Build Now**;
-3. переконатися, що створено pipeline job `lesson-8-django-docker`;
-4. відкрити `lesson-8-django-docker` і натиснути **Build Now**;
-5. у Console Output перевірити успішне виконання stages:
-   - `Build & Push Docker Image`;
-   - `Update GitOps Repository`.
-
-Тег формується як `v1.0.${BUILD_NUMBER}`. Наприклад, build №2 створив образ `v1.0.2`.
-
-Перевірити образ в Amazon ECR:
-
-```bash
-aws ecr describe-images \
-  --repository-name lesson-8-ecr \
-  --region eu-central-1 \
-  --profile neoversity \
-  --query 'sort_by(imageDetails,&imagePushedAt)[-1].[imageTags[0],imagePushedAt]' \
-  --output table
-```
-
-Перевірити зміну GitOps-репозиторію:
-
-```bash
-cd ~/project/neoversity-devops-gitops
-git pull --ff-only
-git log -1 --oneline
-grep -A3 '^image:' charts/django-app/values.yaml
-```
-
-Для контрольного запуску очікуються commit `90e97fe` і тег `v1.0.2`.
-
-## Перевірка результату в Argo CD
-
-Перевірити компоненти Argo CD та адресу вебінтерфейсу:
-
-```bash
-kubectl get pods -n argocd
-kubectl get svc argocd-server -n argocd
-```
-
-Отримати початковий пароль користувача `admin`:
+Логін — `admin`.
 
 ```bash
 kubectl get secret argocd-initial-admin-secret \
-  --namespace argocd \
+  -n argocd \
   -o jsonpath='{.data.password}' \
   | base64 --decode
 echo
 ```
 
-У вебінтерфейсі потрібно відкрити Application `django-app` і перевірити:
+Локальний TLS warning очікуваний, оскільки port-forward використовує сертифікат Argo CD.
 
-- `Sync Status: Synced`;
-- `Health Status: Healthy`;
-- увімкнений `Auto-Sync`;
-- revision відповідає GitOps commit `90e97fe`;
-- Deployment має дві запущені Django replicas.
+### Django
 
-Ті самі стани можна перевірити через `kubectl`:
+Отримання адреси LoadBalancer та перевірка health endpoint:
 
 ```bash
-kubectl get application django-app -n argocd
+APP_HOST="$(
+  kubectl get service django-app-django \
+    -n django \
+    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+)"
 
-kubectl get application django-app \
-  --namespace argocd \
-  -o jsonpath='{.status.sync.status}{" / "}{.status.health.status}{"\n"}'
-
-kubectl get deployment,pods,svc -n django -o wide
-
-kubectl get deployment django-app-django \
-  --namespace django \
-  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+curl -i "http://${APP_HOST}/health/"
 ```
 
-Очікуваний результат останньої команди:
+Очікувано:
 
 ```text
-487337210313.dkr.ecr.eu-central-1.amazonaws.com/lesson-8-ecr:v1.0.2
+HTTP/1.1 200 OK
+Server: gunicorn
+
+{"status": "ok"}
 ```
 
-## Ключові особливості реалізації
+![Django v1.0.4 працює через Gunicorn](images/final-project/django-v1.0.4-gunicorn-health.png)
 
-### Окремий GitOps-репозиторій
+## Моніторинг
 
-Код застосунку та CI-конфігурація зберігаються окремо від бажаного стану Kubernetes. Jenkins не змінює manifests у своєму репозиторії, а створює commit у `neoversity-devops-gitops`. Завдяки цьому історія розгортань є окремою, а Argo CD має одне чітке джерело бажаного стану.
+Monitoring module встановлює:
 
-### Kubernetes Agent із двома контейнерами
+- Metrics Server — метрики CPU/RAM для `kubectl top` і HPA;
+- Prometheus Server;
+- Alertmanager;
+- kube-state-metrics;
+- Node Exporter;
+- Pushgateway;
+- Grafana.
 
-Jenkins створює тимчасовий agent pod із двома спеціалізованими контейнерами:
+Prometheus зберігає метрики протягом трьох днів на encrypted `gp3` volume 8 GiB. Alertmanager використовує 2 GiB, Grafana — 5 GiB.
 
-- `kaniko` збирає та публікує Docker-образ;
-- `git` змінює `values.yaml`, створює commit і виконує push.
+### Prometheus
 
-Kaniko не потребує Docker daemon або монтування `/var/run/docker.sock` у pod.
+```bash
+kubectl port-forward \
+  svc/prometheus-server 9090:80 \
+  -n monitoring
+```
 
-### IRSA замість постійних AWS-ключів
+Адреса: <http://localhost:9090>
 
-ServiceAccount `jenkins-sa` пов'язаний з IAM role через IAM Roles for Service Accounts. Kaniko отримує тимчасові AWS credentials для публікації в ECR без збереження `AWS_ACCESS_KEY_ID` і `AWS_SECRET_ACCESS_KEY` у Jenkins.
+Перевірка `Status → Target health` підтвердила:
 
-### Jenkins Configuration as Code
+- Kubernetes API Servers: `2/2 UP`;
+- Kubernetes Nodes: `3/3 UP`;
+- cAdvisor: `3/3 UP`;
+- Kubernetes Service Endpoints: `7/7 UP`.
 
-Jenkins Helm values містять JCasC-конфігурацію та `seed-job`. Це дозволяє відновити jobs після повторного встановлення Jenkins і зменшує кількість ручних налаштувань у вебінтерфейсі.
+![Prometheus targets перебувають у стані UP](images/final-project/prometheus-targets-up.png)
 
-### Автоматичне самовідновлення Argo CD
+### Grafana
 
-Application `django-app` має автоматичну політику синхронізації:
+```bash
+kubectl port-forward \
+  svc/grafana 3000:80 \
+  -n monitoring
+```
+
+Адреса: <http://localhost:3000>
+
+Логін — `admin`.
+
+```bash
+kubectl get secret grafana \
+  -n monitoring \
+  -o jsonpath='{.data.admin-password}' \
+  | base64 --decode
+echo
+```
+
+Prometheus Data Source автоматично provisioned через Helm values:
+
+```text
+http://prometheus-server.monitoring.svc:80
+```
+
+Для демонстрації імпортовано dashboard **Node Exporter Full**, ID `1860`:
+
+1. `Dashboards → New → Import`;
+2. ввести ID `1860`;
+3. вибрати Data Source `Prometheus`;
+4. натиснути `Import`.
+
+![Grafana Node Exporter Full dashboard](images/final-project/grafana-node-exporter-dashboard.png)
+
+## Автомасштабування
+
+Helm chart створює HPA з такими параметрами:
 
 ```yaml
-automated:
-  enabled: true
-  prune: true
-  selfHeal: true
+minReplicas: 2
+maxReplicas: 6
+targetCPUUtilizationPercentage: 70
 ```
 
-Argo CD не лише застосовує нові Git commits, але й виправляє ручне відхилення стану кластера від стану в Git.
+Коли HPA активний, шаблон Deployment не задає `spec.replicas`. Це запобігає конфлікту між Argo CD та HorizontalPodAutoscaler.
 
-## Обґрунтування відмінностей від навчального прикладу
+Тестове навантаження протягом трьох хвилин:
 
-Загальна послідовність, передбачена завданням, не змінена: Jenkins збирає образ, публікує його в ECR та оновлює Git, після чого Argo CD синхронізує Helm chart. Відмінності стосуються безпеки, сумісності з актуальними версіями інструментів і стабільності навчального середовища.
+```bash
+kubectl run hpa-load-generator \
+  -n django \
+  --image=busybox:1.36.1 \
+  --restart=Never \
+  -- /bin/sh -c '
+    END=$(( $(date +%s) + 180 ))
 
-| Рішення | Відмінність | Обґрунтування |
-|---|---|---|
-| Два окремі Git-репозиторії | Helm chart для Argo CD винесено з основного репозиторію | Це чітко розділяє CI-код і GitOps-стан та відповідає вимозі оновлювати `values.yaml` іншого репозиторію |
-| Kubernetes Secret для GitHub PAT | Токен не передається через Terraform variables або Helm values | Інакше секрет міг би потрапити до Git, Terraform plan або remote state |
-| IRSA для Jenkins Agent | Не використовуються статичні AWS access keys | Pod отримує короткоживучі credentials і лише необхідні права для ECR |
-| Kaniko замість Docker-in-Docker | Образ збирається без Docker daemon | Не потрібні privileged container та доступ до Docker socket worker node |
-| JCasC і seed job | Jobs не створюються повністю вручну | Конфігурація Jenkins стає відтворюваною та зберігається як код |
-| Дві `t3.small` nodes | Замість однієї малої worker node використано дві | Одночасна робота Jenkins controller, agent pod, Argo CD і Django потребувала більше CPU та пам'яті; початкова конфігурація спричиняла проблеми з плануванням pods |
-| EBS CSI Driver і `gp3` | Додано актуальний CSI driver і окремий StorageClass | Jenkins використовує persistent volume; для актуального EKS потрібен CSI provisioner, а `gp3` є сучаснішим типом EBS volume |
-| `use_lockfile = true` для backend | Не використовується застарілий параметр `dynamodb_table` в S3 backend | Актуальна версія Terraform підтримує native S3 state locking; DynamoDB залишено лише як частину попередньої навчальної реалізації |
-| Два Helm releases для Argo CD | Окремо встановлюються Argo CD та chart із ресурсом Application | Application створюється тільки після CRD Argo CD, що забезпечує правильний порядок залежностей |
-| Скорочена конфігурація Argo CD | Dex, Notifications та ApplicationSet вимкнені | Ці компоненти не потрібні для завдання і зайво споживали б ресурси навчального кластера |
+    for i in 1 2; do
+      (
+        while [ "$(date +%s)" -lt "${END}" ]; do
+          wget -q -O /dev/null http://django-app-django/health/
+        done
+      ) &
+    done
 
-## Безпека та файли, які не додаються до Git
+    wait
+  '
+```
 
-`.gitignore` виключає:
+Спостереження:
+
+```bash
+kubectl get hpa -n django --watch
+kubectl get pods -n django --watch
+```
+
+Під навантаженням кількість реплік збільшилася з 2 до 6:
+
+![HPA scale-up](images/final-project/hpa-scale-up.png)
+
+Завершення тесту:
+
+```bash
+kubectl delete pod hpa-load-generator \
+  -n django \
+  --ignore-not-found=true
+```
+
+Після зниження CPU HPA повернув Deployment до двох реплік; Argo CD залишився `Synced / Healthy`:
+
+![HPA recovery](images/final-project/hpa-recovery.png)
+
+## База даних
+
+Контрольна конфігурація:
+
+| Параметр | Значення |
+| --- | --- |
+| Identifier | `final-project-db` |
+| Engine | PostgreSQL `17.10` |
+| Class | `db.t3.micro` |
+| Storage | 20 GiB, encrypted |
+| Public access | `false` |
+| Port | `5432` |
+| Backup retention | 1 день |
+| Multi-AZ | `false` для навчального економного середовища |
+
+RDS розміщено у приватних subnet. Security Group дозволяє TCP/5432 тільки з CIDR VPC `10.0.0.0/16`.
+
+Перевірка з’єднання безпосередньо з Django Pod:
+
+```bash
+kubectl exec \
+  -n django \
+  deployment/django-app-django \
+  -- python manage.py shell -c \
+  'from django.db import connection; connection.ensure_connection(); print(f"vendor={connection.vendor}; usable={connection.is_usable()}")'
+```
+
+Очікуваний результат:
 
 ```text
-.venv/
-.env
-docker/.env
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-*.tfvars.json
+vendor=postgresql; usable=True
 ```
 
-Додаткові заходи:
+Перевірка AWS:
 
-- GitHub PAT зберігається в Kubernetes Secret;
-- AWS access keys не використовуються в Jenkins — доступ надає IRSA;
-- перед `git push` у Jenkinsfile виконується `set +x`, тому команда з токеном не виводиться в build log;
-- Terraform state зберігається у приватному зашифрованому S3 bucket;
-- `.terraform.lock.hcl` зберігається в Git, оскільки він фіксує версії providers і не містить секретів.
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier final-project-db \
+  --region eu-central-1 \
+  --profile neoversity \
+  --query 'DBInstances[0].{
+    Status:DBInstanceStatus,
+    Engine:Engine,
+    Version:EngineVersion,
+    Class:DBInstanceClass,
+    Public:PubliclyAccessible,
+    Encrypted:StorageEncrypted,
+    Backups:BackupRetentionPeriod
+  }' \
+  --output table
+```
 
-Значення `SECRET_KEY` та `POSTGRES_PASSWORD` у навчальному Django chart є тестовими значеннями для ізольованого середовища. У production-середовищі їх необхідно зберігати в Kubernetes Secret або зовнішньому сховищі секретів.
+## Безпека
 
-Перед створенням архіву потрібно переконатися, що локальні state, `.env`, кеші та віртуальне середовище до нього не потрапляють.
+Реалізовані заходи:
 
-## Докази виконання
+- EKS API має private endpoint і public endpoint, обмежений поточною зовнішньою IP-адресою `/32`;
+- worker nodes та RDS розміщені у приватних subnet;
+- RDS не має public access, storage encrypted;
+- RDS Security Group відкриває лише TCP/5432 усередині VPC;
+- ECR використовує immutable tags, AES-256 і scan on push;
+- Jenkins отримує ECR permissions через IRSA та policy, обмежену конкретним repository ARN;
+- GitHub PAT, пароль RDS та Django `SECRET_KEY` не потрапляють у Terraform state завдяки ephemeral variables і write-only attributes;
+- Jenkins маскує GitHub token у pipeline log;
+- Trivy блокує pipeline при виправній CRITICAL vulnerability;
+- Django працює з `DEBUG=False`, обмеженим `ALLOWED_HOSTS` та без hardcoded secrets;
+- Gunicorn використовується замість Django development server;
+- readiness і liveness probes перевіряють `/health/`;
+- Jenkins, Argo CD, Prometheus і Grafana не створюють зовнішні LoadBalancer.
 
-### Успішний Jenkins pipeline
+Перевірка EKS endpoint:
 
-![Успішне виконання Jenkins pipeline](docs/images/jenkins-pipeline-success.png)
+```bash
+aws eks describe-cluster \
+  --name final-project-eks \
+  --region eu-central-1 \
+  --profile neoversity \
+  --query 'cluster.resourcesVpcConfig.{
+    PublicEndpoint:endpointPublicAccess,
+    PrivateEndpoint:endpointPrivateAccess,
+    PublicCIDRs:publicAccessCidrs,
+    Subnets:subnetIds
+  }' \
+  --output json
+```
 
-### Стан Argo CD Application
+Перевірка ECR:
 
-На скриншоті видно Application `django-app`, GitOps-репозиторій, гілку `main` та стани `Healthy` і `Synced`.
+```bash
+aws ecr describe-repositories \
+  --repository-names final-project-ecr \
+  --region eu-central-1 \
+  --profile neoversity \
+  --query 'repositories[0].{
+    Name:repositoryName,
+    Mutability:imageTagMutability,
+    ScanOnPush:imageScanningConfiguration.scanOnPush,
+    Encryption:encryptionConfiguration.encryptionType
+  }' \
+  --output table
+```
 
-![Стан Argo CD Application](docs/images/argocd-application-status.png)
+## Фінальна перевірка
 
-### Автоматична синхронізація та ресурси застосунку
-
-На скриншоті мають бути видимі `Healthy`, `Synced`, revision `90e97fe`, Jenkins CI commit і дві запущені Django replicas.
-
-![Argo CD resource tree](docs/images/argocd-resource-tree.png)
-
-## Фінальна перевірка перед здачею
-
-Перевірити форматування та Terraform-конфігурацію:
+Статичні перевірки:
 
 ```bash
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform validate
-terraform -chdir=terraform plan -detailed-exitcode
+
+helm lint django-chart
+python3 -m py_compile \
+  docker/django/goit/settings.py \
+  docker/django/goit/urls.py
+
+git diff --check
 ```
 
-Для `terraform plan -detailed-exitcode`:
-
-- exit code `0` означає, що змін немає;
-- exit code `1` означає помилку;
-- exit code `2` означає, що Terraform планує зміни.
-
-Перевірити Git:
+Steady-state plan:
 
 ```bash
-git status --short --branch
-git log --oneline --decorate --max-count=8
-git ls-files | grep -E '(^|/)\.env$|\.tfstate($|\.)' || true
+terraform -chdir=terraform plan \
+  -detailed-exitcode \
+  -no-color
 ```
 
-Остання команда не повинна показати `.env` або Terraform state files.
+Exit code `0` означає, що конфігурація відповідає реальній інфраструктурі й змін немає.
 
-## Видалення ресурсів після здачі
-
-AWS-ресурси потрібно видаляти лише після завершення всіх перевірок, збереження скриншотів та здачі роботи:
+Перевірка сервісів:
 
 ```bash
-terraform -chdir=terraform destroy
+kubectl get applications.argoproj.io -n argocd
+kubectl get hpa -n django
+kubectl top pods -n django
+
+kubectl rollout status \
+  deployment/django-app-django \
+  -n django \
+  --timeout=10m
 ```
 
-S3 backend видаляється останнім, коли його state більше не потрібен. Якщо backend, EKS та інші ресурси були видалені повністю, наступне розгортання необхідно знову починати зі створення backend, а не з `terraform init` основної конфігурації.
-
-## Lesson DB Module — універсальний модуль Amazon RDS та Aurora
-
-Гілка [`lesson-db-module`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-db-module) містить універсальний Terraform-модуль для створення керованої реляційної бази даних в AWS.
-
-Залежно від значення `use_aurora` модуль створює:
-
-- `use_aurora = false` — один стандартний Amazon RDS instance;
-- `use_aurora = true` — Amazon Aurora cluster, один writer та налаштовувану кількість reader instances.
-
-Модуль підтримує:
-
-- PostgreSQL та MySQL для стандартної RDS;
-- Aurora PostgreSQL та Aurora MySQL;
-- DB Subnet Group;
-- Security Group;
-- окремі parameter groups для RDS та Aurora;
-- шифрування сховища;
-- автоматичні резервні копії;
-- Multi-AZ для стандартної RDS;
-- writer і reader endpoints для Aurora;
-- безпечне передавання пароля без його збереження в Git.
-
-### Структура модуля
-
-```text
-terraform/modules/rds/
-├── aurora.tf      # Aurora cluster, writer, readers і cluster parameter group
-├── outputs.tf     # RDS, Aurora та універсальні outputs
-├── rds.tf         # Стандартний RDS instance і DB parameter group
-├── shared.tf      # DB Subnet Group і Security Group
-└── variables.tf   # Типізовані вхідні змінні
-```
-
-Спільні DB Subnet Group та Security Group створюються в обох режимах. Parameter group вибирається умовно:
-
-| Режим | Основні ресурси |
-|---|---|
-| `use_aurora = false` | `aws_db_instance`, `aws_db_parameter_group` |
-| `use_aurora = true` | `aws_rds_cluster`, `aws_rds_cluster_instance`, `aws_rds_cluster_parameter_group` |
-| Обидва режими | `aws_db_subnet_group`, `aws_security_group` |
-
-### Приклад використання
-
-```hcl
-module "rds" {
-  source = "./modules/rds"
-
-  name                  = "myapp-db"
-  use_aurora            = false
-  aurora_instance_count = 2
-
-  # Aurora-only configuration
-  engine_cluster                = "aurora-postgresql"
-  engine_version_cluster        = "15.17"
-  parameter_group_family_aurora = "aurora-postgresql15"
-
-  # Standard RDS-only configuration
-  engine                     = "postgres"
-  engine_version             = "17.10"
-  parameter_group_family_rds = "postgres17"
-  allocated_storage          = 20
-  multi_az                   = false
-
-  # Common database configuration
-  instance_class = "db.t3.medium"
-  db_name        = "myapp"
-  username       = "postgres"
-  password       = var.db_password
-  port           = 5432
-
-  # Network configuration
-  vpc_id             = module.vpc.vpc_id
-  subnet_private_ids = module.vpc.private_subnets
-  subnet_public_ids  = module.vpc.public_subnets
-
-  publicly_accessible = false
-  allowed_cidr_blocks = ["10.0.0.0/16"]
-
-  # Backups and protection
-  backup_retention_period = 1
-  storage_encrypted       = true
-  deletion_protection     = false
-  skip_final_snapshot     = true
-
-  parameters = {
-    max_connections            = "200"
-    log_statement              = "ddl"
-    work_mem                   = "4096"
-    log_min_duration_statement = "500"
-  }
-
-  tags = {
-    Environment = "dev"
-    Project     = "myapp"
-  }
-}
-```
-
-Пароль оголошено як sensitive variable і не має значення за замовчуванням:
-
-```hcl
-variable "db_password" {
-  description = "Master password for the database"
-  type        = string
-  sensitive   = true
-}
-```
-
-### Вхідні змінні модуля
-
-| Змінна | Тип | Значення за замовчуванням | Призначення |
-|---|---|---|---|
-| `name` | `string` | обов’язкова | Ім’я стандартного RDS instance або базове ім’я Aurora cluster |
-| `use_aurora` | `bool` | `false` | Перемикає модуль між стандартною RDS та Aurora |
-| `engine` | `string` | `"postgres"` | Engine стандартної RDS: `postgres` або `mysql` |
-| `engine_version` | `string` | `"17.10"` | Версія engine стандартної RDS |
-| `parameter_group_family_rds` | `string` | `"postgres17"` | Родина parameter group для стандартної RDS |
-| `instance_class` | `string` | `"db.t3.micro"` | Клас instance для стандартної RDS або Aurora |
-| `allocated_storage` | `number` | `20` | Обсяг сховища стандартної RDS у GiB |
-| `db_name` | `string` | обов’язкова | Ім’я початкової бази даних |
-| `username` | `string` | обов’язкова | Ім’я master-користувача бази даних |
-| `password` | `string`, sensitive | обов’язкова | Пароль master-користувача; не зберігається в Git |
-| `vpc_id` | `string` | обов’язкова | ID VPC, у якій створюється база |
-| `subnet_private_ids` | `list(string)` | обов’язкова | Приватні subnet IDs для внутрішньої бази |
-| `subnet_public_ids` | `list(string)` | `[]` | Публічні subnet IDs для режиму `publicly_accessible = true` |
-| `publicly_accessible` | `bool` | `false` | Дозволяє створення публічно доступного endpoint |
-| `port` | `number` | `5432` | Порт бази: зазвичай `5432` для PostgreSQL або `3306` для MySQL |
-| `allowed_cidr_blocks` | `list(string)` | `[]` | CIDR-блоки, яким Security Group дозволяє підключення |
-| `multi_az` | `bool` | `false` | Вмикає Multi-AZ для стандартної RDS |
-| `backup_retention_period` | `number` | `7` | Кількість днів зберігання автоматичних резервних копій |
-| `parameters` | `map(string)` | `{}` | Параметри для parameter group вибраного типу бази |
-| `storage_encrypted` | `bool` | `true` | Вмикає шифрування сховища |
-| `deletion_protection` | `bool` | `false` | Захищає базу або cluster від випадкового видалення |
-| `skip_final_snapshot` | `bool` | `true` | Визначає, чи пропускати фінальний snapshot під час видалення |
-| `tags` | `map(string)` | `{}` | AWS tags для створених ресурсів |
-| `engine_cluster` | `string` | `"aurora-postgresql"` | Aurora engine: `aurora-postgresql` або `aurora-mysql` |
-| `engine_version_cluster` | `string` | `"15.17"` | Версія Aurora engine |
-| `parameter_group_family_aurora` | `string` | `"aurora-postgresql15"` | Родина Aurora cluster parameter group |
-| `aurora_instance_count` | `number` | `2` | Загальна кількість Aurora instances, включно з одним writer |
-
-Змінні без default є обов’язковими, оскільки залежать від конкретного середовища. Для `password` значення за замовчуванням навмисно відсутнє, щоб пароль не зберігався у вихідному коді.
-
-### Як змінити тип бази даних
-
-#### Стандартна RDS PostgreSQL
-
-Для створення звичайного PostgreSQL instance:
-
-```hcl
-use_aurora                = false
-engine                    = "postgres"
-engine_version            = "17.10"
-parameter_group_family_rds = "postgres17"
-port                      = 5432
-```
-
-У цьому режимі створюються:
-
-- один `aws_db_instance`;
-- стандартна `aws_db_parameter_group`;
-- DB Subnet Group;
-- Security Group.
-
-#### Стандартна RDS MySQL
-
-Для переходу на MySQL потрібно змінити engine, його версію, parameter group family, порт і engine-specific parameters:
-
-```hcl
-use_aurora                 = false
-engine                     = "mysql"
-engine_version             = "<supported MySQL version>"
-parameter_group_family_rds = "<matching MySQL family>"
-port                       = 3306
-```
-
-Версія engine та parameter group family повинні бути сумісними й доступними у вибраному AWS Region.
-
-Параметри `log_statement` і `work_mem` належать PostgreSQL. Для MySQL у `parameters` потрібно передати параметри, які підтримує відповідна MySQL parameter group.
-
-#### Aurora PostgreSQL
-
-У поточному прикладі Aurora PostgreSQL уже налаштована. Для перемикання достатньо змінити прапор:
-
-```hcl
-use_aurora = true
-```
-
-Aurora-specific значення:
-
-```hcl
-engine_cluster                = "aurora-postgresql"
-engine_version_cluster        = "15.17"
-parameter_group_family_aurora = "aurora-postgresql15"
-instance_class                = "db.t3.medium"
-aurora_instance_count         = 2
-port                          = 5432
-```
-
-За значення `aurora_instance_count = 2` створюються:
-
-- один writer;
-- один reader.
-
-Якщо встановити:
-
-```hcl
-aurora_instance_count = 1
-```
-
-буде створено лише writer. Кількість readers обчислюється як `aurora_instance_count - 1`.
-
-#### Aurora MySQL
-
-Для Aurora MySQL потрібно змінити Aurora engine, версію, parameter group family, порт і parameters:
-
-```hcl
-use_aurora                   = true
-engine_cluster               = "aurora-mysql"
-engine_version_cluster       = "<supported Aurora MySQL version>"
-parameter_group_family_aurora = "<matching Aurora MySQL family>"
-port                         = 3306
-```
-
-#### Зміна класу instance
-
-Клас обчислювальних ресурсів задається однією змінною:
-
-```hcl
-instance_class = "db.t3.medium"
-```
-
-Перед застосуванням потрібно перевірити, що вибраний клас підтримує відповідні engine, engine version та AWS Region.
-
-#### Multi-AZ і кількість реплік
-
-Для стандартної RDS Multi-AZ вмикається так:
-
-```hcl
-multi_az = true
-```
-
-Змінна `multi_az` використовується лише стандартною RDS. Aurora має власну кластерну модель відмовостійкості, а кількість її compute instances задається через `aurora_instance_count`.
-
-### Запуск Terraform
-
-#### Передумови
-
-Потрібні:
-
-- Terraform;
-- AWS CLI;
-- AWS profile `neoversity`;
-- створений S3 backend для Terraform state.
-
-Перевірка AWS credentials:
+Перевірка відсутності state, plans, `.tfvars` і `.env` у Git:
 
 ```bash
-aws sts get-caller-identity --profile neoversity
+git ls-files | rg \
+  '(^|/)(terraform\.tfstate($|\.)|\.terraform/|\.env$)|(^|/)[^/]*\.tfvars(\.json)?$|\.tfplan$' \
+  || true
 ```
 
-#### Безпечне передавання пароля
+## Видалення ресурсів
 
-Пароль не записується в Git або в committed `.tfvars` file. У WSL його можна передати через environment variable:
+> AWS-ресурси створюють витрати. Після демонстрації проєкту інфраструктуру потрібно видалити.
+
+Секретні variables мають залишатися експортованими в поточній сесії. Створення destroy plan:
 
 ```bash
-read -s -p "DB password: " TF_VAR_db_password
-echo
-export TF_VAR_db_password
+terraform -chdir=terraform plan \
+  -destroy \
+  -out=/tmp/final-project-destroy.tfplan
 ```
 
-Значення позначене як `sensitive`, тому Terraform приховує його у звичайному CLI output. Водночас database password може зберігатися у Terraform state, тому remote state повинен бути приватним і зашифрованим.
-
-#### Форматування та перевірка
-
-З кореня репозиторію:
+Застосування:
 
 ```bash
-terraform -chdir=terraform init -reconfigure
-terraform -chdir=terraform fmt -check -recursive
-terraform -chdir=terraform validate
-terraform -chdir=terraform plan
+terraform -chdir=terraform apply \
+  /tmp/final-project-destroy.tfplan
 ```
 
-Після перевірки plan:
-
-```bash
-terraform -chdir=terraform apply
-```
-
-Після завершення роботи зі змінною:
-
-```bash
-unset TF_VAR_db_password
-```
-
-Параметр `-target=module.rds` використовувався лише для ізольованої перевірки database module у навчальному репозиторії, який також містить EKS, Jenkins та Argo CD:
-
-```bash
-terraform -chdir=terraform plan -target=module.rds
-terraform -chdir=terraform apply -target=module.rds
-```
-
-`-target` не призначений для звичайного повного розгортання. Для стандартного запуску всієї конфігурації потрібно використовувати `terraform plan` і `terraform apply` без targeting.
-
-### Перевірка результату
-
-Універсальні Terraform outputs:
-
-```bash
-terraform -chdir=terraform output database_endpoint
-terraform -chdir=terraform output database_port
-terraform -chdir=terraform output rds_security_group_id
-terraform -chdir=terraform output rds_subnet_group_name
-```
-
-Для Aurora додатково доступні:
-
-```bash
-terraform -chdir=terraform output database_reader_endpoint
-terraform -chdir=terraform output aurora_cluster_identifier
-terraform -chdir=terraform output aurora_writer_instance_identifier
-terraform -chdir=terraform output aurora_reader_instance_identifiers
-```
-
-#### Перевірка стандартної RDS
-
-```bash
-aws rds describe-db-instances \
-  --db-instance-identifier myapp-db \
-  --region eu-central-1 \
-  --profile neoversity \
-  --query "DBInstances[0].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Engine:Engine,Version:EngineVersion,Class:DBInstanceClass,MultiAZ:MultiAZ,Public:PubliclyAccessible,Encrypted:StorageEncrypted,Endpoint:Endpoint.Address,Port:Endpoint.Port}" \
-  --output table
-```
-
-Очікуваний стан після створення — `available`.
-
-#### Перевірка Aurora
-
-```bash
-aws rds describe-db-clusters \
-  --db-cluster-identifier myapp-db-cluster \
-  --region eu-central-1 \
-  --profile neoversity \
-  --query "DBClusters[0].{Identifier:DBClusterIdentifier,Status:Status,Engine:Engine,Version:EngineVersion,WriterEndpoint:Endpoint,ReaderEndpoint:ReaderEndpoint,Encrypted:StorageEncrypted}" \
-  --output table
-```
-
-Перевірка writer і reader instances:
-
-```bash
-aws rds describe-db-instances \
-  --region eu-central-1 \
-  --profile neoversity \
-  --filters "Name=db-cluster-id,Values=myapp-db-cluster" \
-  --query "DBInstances[].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Class:DBInstanceClass,AZ:AvailabilityZone}" \
-  --output table
-```
-
-### Доказ створення стандартної RDS
-
-Під час практичної перевірки було успішно створено приватний зашифрований PostgreSQL RDS instance версії `17.10`.
-
-![Стандартний PostgreSQL RDS instance](docs/images/rds-standard-instance.png)
-
-### Особливість AWS Free Plan
-
-Стандартний PostgreSQL RDS instance був успішно створений і перевірений у AWS.
-
-Для Aurora Terraform сформував коректний plan:
-
-```text
-Plan: 4 to add, 0 to change, 2 to destroy
-```
-
-Plan передбачав створення:
-
-- Aurora cluster parameter group;
-- Aurora cluster;
-- writer instance;
-- reader instance.
-
-Під час `apply` AWS відхилив створення повністю конфігурованого Aurora cluster через обмеження поточного AWS Free Plan:
-
-```text
-FreeTierRestrictionError:
-To use Aurora clusters with free plan accounts
-you need to set WithExpressConfiguration.
-```
-
-AWS Free Plan дозволяє створення Aurora PostgreSQL через [Express Configuration](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/CHAP_GettingStartedAurora.AuroraPostgreSQL.ExpressConfig.html), яка автоматично створює Aurora Serverless cluster і writer.
-
-Express Configuration не була використана, оскільки:
-
-- вона відрізняється від архітектури домашнього завдання;
-- автоматично створює Serverless writer замість окремо керованих Terraform resources;
-- не відповідає сценарію з власними DB Subnet Group, Security Group, writer і reader instances;
-- AWS provider, використаний у проєкті, не підтримує `WithExpressConfiguration` у `aws_rds_cluster`. Підтримка відстежується у [HashiCorp issue #47117](https://github.com/hashicorp/terraform-provider-aws/issues/47117).
-
-Тому кореневий приклад залишено у придатному для запуску в поточному акаунті режимі:
-
-```hcl
-use_aurora = false
-```
-
-Aurora-частина модуля збережена як повна Terraform-конфігурація для AWS account без обмеження Free Plan.
-
-### Обґрунтування відмінностей від навчального конспекту
-
-| Відмінність | Реалізація | Обґрунтування |
-|---|---|---|
-| Версія стандартного PostgreSQL | `17.10` замість `17.2` | Версія `17.2` недоступна в `eu-central-1`; через AWS CLI підтверджено підтримку `17.10` і family `postgres17` |
-| Версія Aurora PostgreSQL | `15.17` замість `15.3` | Версія `15.3` недоступна в регіоні; підтверджено `15.17` і family `aurora-postgresql15` |
-| Пароль | `var.db_password` без default | Hardcoded password із конспекту міг би потрапити до Git; значення передається через `TF_VAR_db_password` |
-| Доступ до бази | `publicly_accessible = false` | База розміщується у private subnets і не має прямого доступу з інтернету |
-| Security Group | Доступ лише з `10.0.0.0/16` | Порт бази не відкривається для `0.0.0.0/0` |
-| Шифрування | `storage_encrypted = true` | Дані шифруються у сховищі AWS |
-| Очищення training environment | `skip_final_snapshot = true`, `deletion_protection = false` | Дозволяє повністю видалити навчальні ресурси після перевірки; для production ці значення потрібно змінити |
-| Кількість Aurora instances | `aurora_instance_count` означає загальну кількість instances | У конспекті одночасно використовувалися різні назви `aurora_instance_count` і `aurora_replica_count`; одна змінна усуває неоднозначність |
-| Порядок створення Aurora | Reader має `depends_on` від writer | Writer гарантовано створюється першим, а під час destroy reader видаляється раніше writer |
-| Parameter group | Додано `max_connections`, `log_statement`, `work_mem` і `log_min_duration_statement` | Перші три параметри прямо вимагає домашнє завдання; останній залишено як додатковий параметр із практики |
-| Aurora у Free Plan | Live apply не виконувався через обмеження акаунта | Заміна на Express Configuration порушила б структуру та вимоги завдання |
-
-### Видалення ресурсів
-
-Після збереження доказів і завершення перевірки всі створені ресурси потрібно видалити:
-
-```bash
-read -s -p "DB password: " TF_VAR_db_password
-echo
-export TF_VAR_db_password
-
-terraform -chdir=terraform destroy
-
-unset TF_VAR_db_password
-```
-
-Після destroy потрібно перевірити state:
+Перевірка state:
 
 ```bash
 terraform -chdir=terraform state list
 ```
 
-Основна конфігурація використовує вже створений remote S3 backend. Його bucket не створюється модулем у цьому запуску, тому звичайний `terraform destroy` основної конфігурації не видаляє backend до завершення роботи зі state.
+Після успішного видалення команда не повинна повертати керованих ресурсів.
+
+Remote S3 backend не входить до цього запуску Terraform і навмисно зберігається після `destroy`, щоб state залишався доступним до завершення операції.
+
+Очищення shell variables:
+
+```bash
+unset TF_VAR_eks_public_access_cidrs
+unset TF_VAR_db_password
+unset TF_VAR_github_token
+unset TF_VAR_django_secret_key
+unset PUBLIC_IP
+```
+
+## Попередні практичні роботи
+
+Фінальний проєкт розвиває результати попередніх тем. Їхній стан доступний в окремих Git branches:
+
+| Тема | Гілка |
+| --- | --- |
+| Kubernetes та Amazon EKS | [`lesson-6`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-6) |
+| Helm | [`lesson-7`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-7) |
+| Jenkins CI та Argo CD | [`lesson-8-9`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-8-9) |
+| RDS та Aurora module | [`lesson-db-module`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/lesson-db-module) |
+| Об’єднаний фінальний проєкт | [`final-project`](https://github.com/ayri77/neoversity-devops-ci-cd-lab/tree/final-project) |
+
+README гілки `final-project` сфокусований на підсумковому рішенні. Детальна документація кожної попередньої практичної роботи збережена у відповідній гілці та Git history.
