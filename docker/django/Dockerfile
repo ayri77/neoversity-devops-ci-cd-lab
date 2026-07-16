@@ -8,12 +8,6 @@ RUN python -m pip install --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-ENV POSTGRES_HOST=${POSTGRES_HOST}
-ENV POSTGRES_PORT=${POSTGRES_PORT}
-ENV POSTGRES_NAME=${POSTGRES_NAME}
-ENV POSTGRES_USER=${POSTGRES_USER}
-ENV POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-
 COPY . .
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "2", "--timeout", "60", "goit.wsgi:application"]
