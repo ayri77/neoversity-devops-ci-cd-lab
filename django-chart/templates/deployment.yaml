@@ -31,11 +31,17 @@ spec:
             httpGet:
               path: /health/
               port: {{ .Values.service.targetPort }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health/
               port: {{ .Values.service.targetPort }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 30
             periodSeconds: 20

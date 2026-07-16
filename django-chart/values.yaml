@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: 487337210313.dkr.ecr.eu-central-1.amazonaws.com/final-project-ecr
-  tag: allowed-hosts
+  tag: "v1.0.3"
   pullPolicy: IfNotPresent
 
 service:
@@ -21,8 +21,8 @@ ingress:
 existingSecret: django-app-secrets
 
 config:
-  ALLOWED_HOSTS: "localhost,127.0.0.1,*"
-  DEBUG: "True"
+  ALLOWED_HOSTS: "localhost,127.0.0.1,.elb.amazonaws.com,django-app-django,django-app-django.django.svc,django-app-django.django.svc.cluster.local"
+  DEBUG: "False"
 
 resources:
   requests:
