@@ -1,14 +1,3 @@
-# Connect the module for S3 and DynamoDB resources
-# comment to prevent duplicating backend
-/*
-module "s3_backend" {
-  source = "./modules/s3-backend"
-
-  bucket_name = "pbori-neoversity-terraform-state"
-  table_name  = "terraform-locks"
-}
-*/
-
 # Connect the module for VPC networking resources
 module "vpc" {
   source = "./modules/vpc"
@@ -69,6 +58,7 @@ module "jenkins" {
   github_token          = var.github_token
   github_token_revision = var.github_token_revision
   ecr_repository_arn    = module.ecr.repository_arn
+  ecr_repository_url    = module.ecr.repository_url
 
   providers = {
     aws        = aws

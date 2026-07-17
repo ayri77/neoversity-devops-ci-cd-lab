@@ -27,6 +27,17 @@ resource "kubernetes_secret_v1" "github_token" {
   data_wo_revision = var.github_token_revision
 }
 
+resource "kubernetes_config_map_v1" "pipeline_config" {
+  metadata {
+    name      = "jenkins-pipeline-config"
+    namespace = kubernetes_namespace_v1.jenkins.metadata[0].name
+  }
+
+  data = {
+    ECR_REPOSITORY_URL = var.ecr_repository_url
+  }
+}
+
 resource "aws_iam_role" "jenkins_kaniko_role" {
   name = "${var.cluster_name}-jenkins-kaniko-role"
 
@@ -106,7 +117,8 @@ resource "helm_release" "jenkins" {
   ]
 
   depends_on = [
-    kubernetes_secret_v1.github_token
+    kubernetes_secret_v1.github_token,
+    kubernetes_config_map_v1.pipeline_config,
   ]
 }
 

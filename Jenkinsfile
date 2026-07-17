@@ -17,6 +17,9 @@ spec:
         - sleep
       args:
         - 99d
+      envFrom:
+        - configMapRef:
+            name: jenkins-pipeline-config
 
     - name: git
       image: alpine/git:latest
@@ -24,6 +27,9 @@ spec:
       command:
         - cat
       tty: true
+      envFrom:
+        - configMapRef:
+            name: jenkins-pipeline-config
 
     - name: trivy
       image: aquasec/trivy:0.72.0
@@ -31,14 +37,15 @@ spec:
       command:
         - cat
       tty: true
+      envFrom:
+        - configMapRef:
+            name: jenkins-pipeline-config
 '''
     }
   }
 
   environment {
     AWS_REGION    = 'eu-central-1'
-    ECR_REGISTRY  = '487337210313.dkr.ecr.eu-central-1.amazonaws.com'
-    IMAGE_NAME    = 'final-project-ecr'
     IMAGE_TAG     = "v1.0.${BUILD_NUMBER}"
 
     GITOPS_REPO   = 'github.com/ayri77/neoversity-devops-gitops.git'
@@ -54,7 +61,7 @@ spec:
             /kaniko/executor \
               --context="${WORKSPACE}/docker/django" \
               --dockerfile="${WORKSPACE}/docker/django/Dockerfile" \
-              --destination="${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" \
+              --destination="${ECR_REPOSITORY_URL}:${IMAGE_TAG}" \
               --cache=true
           '''
         }
@@ -72,7 +79,7 @@ spec:
               --exit-code 1 \
               --no-progress \
               --timeout 15m \
-              "${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+              "${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
           '''
         }
       }
@@ -99,21 +106,27 @@ spec:
               cd gitops-repository
 
               sed -i \
-                "s|^  tag:.*|  tag: \\"${IMAGE_TAG}\\"|" \
+                "s|^  repository:.*|  repository: ${ECR_REPOSITORY_URL}|" \
                 "${GITOPS_VALUES}"
 
-              grep "tag:" "${GITOPS_VALUES}"
+              sed -i \
+                "s|^  tag:.*|  tag: \"${IMAGE_TAG}\"|" \
+                "${GITOPS_VALUES}"
+
+              grep -E "repository:|tag:" "${GITOPS_VALUES}"
 
               git config user.name "Jenkins CI"
               git config user.email "jenkins@localhost"
 
               git add "${GITOPS_VALUES}"
 
+              REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
+
               if git diff --cached --quiet; then
                 echo "GitOps values already contain ${IMAGE_TAG}"
               else
                 git commit \
-                  -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
+                  -m "Deploy ${REPOSITORY_NAME}:${IMAGE_TAG}"
 
                 set +x
                 git push \

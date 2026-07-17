@@ -30,3 +30,8 @@ variable "ecr_repository_arn" {
   description = "ARN of the ECR repository available to Jenkins"
   type        = string
 }
+
+variable "ecr_repository_url" {
+  description = "URL of the ECR repository used by the Jenkins pipeline"
+  type        = string
+}
